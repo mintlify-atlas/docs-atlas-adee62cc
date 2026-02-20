@@ -1,0 +1,155 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Azure Linux",
+  "projectDescription": "A lightweight Linux distribution for Microsoft's cloud infrastructure and edge products",
+  "theme": "aspen",
+  "primaryColor": "#0078D4",
+  "lightColor": "#50E6FF",
+  "darkColor": "#0062AD",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "getting-started"
+            ]
+          },
+          {
+            "group": "Quick Start",
+            "pages": [
+              "quick-start/install-from-iso",
+              "quick-start/build-image",
+              "quick-start/cloud-init"
+            ]
+          },
+          {
+            "group": "Building",
+            "pages": [
+              "building/overview",
+              "building/prerequisites",
+              "building/toolchain-stage",
+              "building/package-stage",
+              "building/image-stage",
+              "building/build-variables",
+              "building/add-package"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/build-system",
+              "architecture/initial-prep",
+              "architecture/local-packages",
+              "architecture/package-building",
+              "architecture/image-generation",
+              "architecture/logs"
+            ]
+          },
+          {
+            "group": "Image Configuration",
+            "pages": [
+              "image-config/overview",
+              "image-config/disks-partitions",
+              "image-config/system-config",
+              "image-config/package-lists",
+              "image-config/examples"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "security/overview",
+              "security/features",
+              "security/ca-certificates",
+              "security/iso-verification",
+              "security/production-builds",
+              "security/read-only-roots"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/amd-support",
+              "advanced/nvidia-support",
+              "advanced/developer-tools",
+              "advanced/reproducing-builds"
+            ]
+          },
+          {
+            "group": "Package Management",
+            "pages": [
+              "packages/overview",
+              "packages/specs-vs-extended",
+              "packages/creating-spec-files",
+              "packages/package-repository"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/guidelines",
+              "contributing/pull-requests",
+              "contributing/coding-standards"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Toolkit Reference",
+        "groups": [
+          {
+            "group": "Build Tools",
+            "pages": [
+              "toolkit/grapher",
+              "toolkit/imagegen",
+              "toolkit/imagecustomizer",
+              "toolkit/pkggen",
+              "toolkit/scheduler"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "toolkit/downloader",
+              "toolkit/licensecheck",
+              "toolkit/specreader",
+              "toolkit/validator"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Lightweight Linux distribution optimized for cloud and edge",
+    "Complete RPM-based package build system with 1500+ packages",
+    "Multi-stage build system (toolchain, packages, images)",
+    "Multiple image format support (ISO, VHD, VHDX, containers)",
+    "Security-hardened with production build recommendations",
+    "Image customization via JSON configuration files",
+    "Support for both package-based and image-based updates",
+    "Cloud-init integration for automated provisioning",
+    "UEFI and legacy BIOS boot support",
+    "Multiple architecture support (x86_64, aarch64)"
+  ],
+  "publicApiSurface": [
+    "make image - Build system images from configurations",
+    "make iso - Generate bootable ISO images",
+    "make toolchain - Build the compiler toolchain",
+    "make packages - Build RPM packages",
+    "make meta-user-data - Generate cloud-init configuration",
+    "imagegen - Image generation tool",
+    "imagecustomizer - Image customization tool",
+    "grapher - Package dependency analyzer",
+    "pkggen - Package generation tool",
+    "scheduler - Parallel build scheduler",
+    "imageconfigvalidator - Validate image configurations",
+    "specreader - Parse RPM spec files",
+    "licensecheck - Verify package licenses",
+    "downloader - Download package sources"
+  ]
+}
