@@ -1,0 +1,231 @@
+---
+title: Coding Standards
+description: Coding standards and best practices for Azure Linux development including Go formatting, SPEC files, and package management
+---
+
+## Go Code Standards
+
+When contributing to the Azure Linux toolkit, all Go code must adhere to Go formatting standards as described by the [fmt](https://pkg.go.dev/fmt) package.
+
+### Formatting Go Code
+
+To format your Go code, run the following command in your Azure Linux toolkit:
+
+```bash
+make go-tidy-all
+```
+
+This command will:
+- Format all Go code according to Go standards
+- Organize imports
+- Remove unused dependencies
+- Update go.mod and go.sum files
+
+### Testing Go Code
+
+Before submitting a PR with Go tool changes, ensure all tests pass:
+
+```bash
+cd toolkit
+# fix formatting
+sudo make go-tidy-all
+# check tests
+sudo make go-test-coverage
+```
+
+Both commands must complete successfully before your PR can be merged.
+
+## SPEC File Standards
+
+SPEC files are the core of package definitions in Azure Linux. Follow these standards when creating or modifying SPEC files.
+
+### Package Location
+
+Ensure packages are located in the appropriate directory:
+
+- **SPECS** - Fully supported packages with timely CVE maintenance
+- **SPECS-EXTENDED** - Experimental or proof-of-concept packages
+
+### SPEC File Requirements
+
+#### Release Tag
+
+Increment the `Release` tag when:
+- Making changes to an existing package
+- Packages depend on static components you modified (Golang, `*-static` subpackages, etc.)
+
+#### Check Section
+
+All SPEC files must include a `%check` section:
+- Add a `%check` section if not already present
+- Verify tests pass with `RUN_CHECK=y`
+- Results will not fail a build, but logs should be checked
+
+Example:
+
+```spec
+%check
+make test
+```
+
+#### Changelog Entries
+
+Add clear changelog entries for all modifications:
+
+```spec
+%changelog
+* Mon Oct 14 2024 Name <email@example.com> - 1.0.0-2
+- Package promoted from SPECS-EXTENDED to SPECS
+- License verified
+```
+
+#### Clean SPEC Files
+
+When graduating packages from SPECS-EXTENDED to SPECS:
+- Remove references, macros, comments, etc. only applicable to other distros
+- Ensure the SPEC file is specific to Azure Linux
+
+### Package Sources
+
+All package sources must be properly managed:
+
+#### Source Location
+
+Sources should be:
+- Compressed and placed on the source server (preferred)
+- Or located in `SPECS/<package>/SOURCES` or `SPECS/<package>`
+
+#### Source Hashes
+
+All source files must have up-to-date hashes in `*.signatures.json` files:
+
+```bash
+cd toolkit
+sudo make input-srpms REBUILD_TOOLS=y SRPM_FILE_SIGNATURE_HANDLING=update
+```
+
+This generates SHA256 hashes for all source files.
+
+#### Upstream Sources
+
+Packages must have a viable upstream source that actively addresses CVEs.
+
+## Manifest File Standards
+
+Several manifest files must be kept up-to-date for package management.
+
+### cgmanifest Files
+
+cgmanifest files record all package sources and must be:
+- Up-to-date
+- Alphabetically sorted
+
+Files to maintain:
+- `./cgmanifest.json`
+- `./toolkit/tools/cgmanifest.json`
+- `./toolkit/scripts/toolchain/cgmanifest.json`
+- `.github/workflows/cgmanifest.json`
+
+Validate with:
+
+```bash
+.github/workflows/validate-cg-manifest.sh SPECS/<package name>/<package-name>.spec
+```
+
+Run this in an Azure Linux container or Ubuntu >= 22.04.
+
+### LICENSE-MAP Files
+
+LICENSE-MAP files indicate which licenses are being used by Azure Linux's packages and where packages may be derived from.
+
+Files to maintain:
+- `./LICENSES-AND-NOTICES/SPECS/data/licenses.json`
+- `./LICENSES-AND-NOTICES/SPECS/LICENSES-MAP.md`
+
+Validate with:
+
+```bash
+python3 ./toolkit/scripts/license_map.py \
+./LICENSES-AND-NOTICES/SPECS/data/licenses.json \
+./LICENSES-AND-NOTICES/SPECS/LICENSES-MAP.md \
+./SPECS \
+./SPECS-EXTENDED \
+./SPECS-SIGNED
+```
+
+### Toolchain Manifests
+
+If your changes affect the toolchain, update these manifests to match the latest package versions in SPEC files:
+- `toolchain_x86_64.txt`
+- `toolchain_aarch64.txt`
+- `pkggen_core_x86_64.txt`
+- `pkggen_core_aarch64.txt`
+
+Located in: [toolkit/resources/manifests/package](https://github.com/microsoft/azurelinux/tree/main/toolkit/resources/manifests/package)
+
+## Package Requirements
+
+### General Requirements
+
+All packages must meet these requirements:
+
+1. **Viable Upstream Source** - Package needs a viable upstream source that actively addresses CVEs
+2. **No Project-Specific Code** - Package must not include project specific code
+3. **Multiple Use Cases** - For SPECS packages, the package needs to offer value for multiple use cases
+
+### Static Dependencies
+
+When modifying packages with static components:
+
+1. Identify dependent packages that contain a `BuildRequires` on your package
+2. Increment the `Release` tag for all dependent packages
+3. This applies to:
+   - Golang packages
+   - `*-static` subpackages
+   - Other packages creating static links
+
+This can be difficult to discern based on spec files alone and may require:
+- Investigating `make` commands in dependent packages
+- Consulting an Azure Linux developer
+
+## Build Standards
+
+### Building Packages
+
+All packages must successfully build before submission. See the [building instructions](/building/overview) for detailed guidance.
+
+### Building the Toolchain
+
+If you modified toolchain packages:
+
+1. Verify the toolchain builds successfully
+2. Update all toolchain manifests
+3. Test the build with:
+
+```bash
+make clean
+make workplan REBUILD_TOOLCHAIN=y DISABLE_UPSTREAM_REPOS=y CONFIG_FILE=""
+```
+
+## Documentation Standards
+
+When making changes to the build system or adding new features:
+
+1. Update relevant documentation in [toolkit/docs](https://github.com/microsoft/azurelinux/tree/main/toolkit/docs)
+2. Ensure documentation is clear and comprehensive
+3. Include examples where appropriate
+4. Update any affected tutorials or guides
+
+## Code Review Standards
+
+During code review, expect reviewers to check for:
+
+- Adherence to these coding standards
+- Proper formatting (Go code, SPEC files)
+- Complete and accurate manifest files
+- Appropriate test coverage
+- Clear and accurate documentation
+- Security best practices
+- Performance considerations
+
+Address all feedback promptly and thoroughly to ensure smooth PR approval.

@@ -1,0 +1,68 @@
+---
+title: Security Overview
+description: Security overview and best practices for Azure Linux
+---
+
+Azure Linux takes security seriously with comprehensive protection mechanisms built into the operating system. This section covers security features, certificate management, image verification, and production deployment recommendations.
+
+## Security Topics
+
+### [Security Features](features)
+Comprehensive overview of security features including:
+- Networking protections (firewall, SYN cookies)
+- Kernel hardening (ASLR, kernel lockdown)
+- Build security (PIE, stack protector, RELRO)
+- Process isolation (SELinux, namespaces, seccomp)
+
+### [CA Certificate Management](ca-certificates)
+Learn how to manage SSL/TLS certificates:
+- Installing and updating CA certificates
+- Custom certificate configuration
+- Legacy certificate support
+
+### [ISO Image Verification](iso-verification)
+Verify the integrity and authenticity of downloaded ISO images:
+- GPG signature verification
+- Checksum validation
+- Both x86_64 and aarch64 architectures
+
+### [Production Build Recommendations](production-builds)
+Best practices for building production-ready images:
+- GPG signature validation
+- Secure build workflows
+- Package signing requirements
+
+### [Read-Only Root Filesystem](read-only-roots)
+Configure read-only root filesystems with dm-verity for enhanced security.
+
+<Warning>
+Microsoft takes security vulnerabilities seriously. **Never report security issues through public GitHub issues.** Instead, report them to the Microsoft Security Response Center (MSRC) at [https://msrc.microsoft.com/create-report](https://msrc.microsoft.com/create-report) or email [secure@microsoft.com](mailto:secure@microsoft.com).
+</Warning>
+
+## Reporting Security Issues
+
+If you believe you have found a security vulnerability in Azure Linux:
+
+1. **Do not** report it through public GitHub issues
+2. Report to Microsoft Security Response Center: [https://msrc.microsoft.com/create-report](https://msrc.microsoft.com/create-report)
+3. Or email: [secure@microsoft.com](mailto:secure@microsoft.com)
+4. Optionally encrypt with [Microsoft's PGP key](https://www.microsoft.com/en-us/msrc/pgp-key-msrc)
+
+You should receive a response within 24 hours.
+
+### Information to Include
+
+When reporting security issues, include:
+- Type of issue (buffer overflow, SQL injection, etc.)
+- Full paths of affected source files
+- Location of affected code (tag/branch/commit or URL)
+- Special configuration needed to reproduce
+- Step-by-step reproduction instructions
+- Proof-of-concept or exploit code (if possible)
+- Impact assessment and exploitation scenarios
+
+Complete reports contribute to higher bug bounty awards. See the [Microsoft Bug Bounty Program](https://microsoft.com/msrc/bounty) for details.
+
+## Security Policy
+
+Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://www.microsoft.com/en-us/msrc/cvd).

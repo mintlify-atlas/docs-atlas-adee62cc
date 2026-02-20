@@ -1,0 +1,149 @@
+---
+title: "Image Configuration Overview"
+description: "Overview of Azure Linux image configuration files and structure"
+---
+
+Image configuration files define how Azure Linux images are built, including disk layout, partitions, system settings, and package lists. These JSON configuration files control the entire image generation process.
+
+## Configuration Structure
+
+An image configuration consists of two main sections:
+
+<CardGroup cols={2}>
+  <Card title="Disks" icon="hard-drive">
+    Defines disk layout, partitions, and artifacts
+  </Card>
+  <Card title="SystemConfigs" icon="gear">
+    Defines system configuration, packages, and settings
+  </Card>
+</CardGroup>
+
+## Basic Configuration Example
+
+Here's a minimal EFI-based image configuration:
+
+```json core-efi.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+## Configuration Sections
+
+### Disks Section
+
+The `Disks` array defines the physical disk layout:
+
+- **Partition table type** (GPT or MBR)
+- **Disk size** for virtual disks
+- **Partitions** with filesystem types and sizes
+- **Artifacts** defining output image format
+
+### SystemConfigs Section
+
+The `SystemConfigs` array defines system-level configuration:
+
+- **Boot configuration** (EFI or legacy)
+- **Partition mounting** and mount options
+- **Package lists** to install
+- **Kernel options** and command line parameters
+- **Users and network** configuration
+- **Customization scripts** for pre/post-install
+
+## Configuration Validation
+
+Validate your image configuration using the `imageconfigvalidator` tool:
+
+```bash
+imageconfigvalidator --config myconfig.json
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Virtual Machines" icon="cloud">
+    VHDX/VHD images with EFI or legacy boot
+  </Card>
+  <Card title="Container Images" icon="box">
+    Rootfs-only images without partitions
+  </Card>
+  <Card title="ISO Installers" icon="disc">
+    Bootable installation media
+  </Card>
+  <Card title="Cloud Images" icon="cloud-arrow-up">
+    Marketplace images with cloud-init
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Disk Configuration" href="./disks-partitions" icon="hard-drive">
+    Learn about disk and partition configuration
+  </Card>
+  <Card title="System Configuration" href="./system-config" icon="gear">
+    Configure system settings and packages
+  </Card>
+  <Card title="Package Lists" href="./package-lists" icon="list">
+    Manage package lists and dependencies
+  </Card>
+  <Card title="Examples" href="./examples" icon="code">
+    View real-world configuration examples
+  </Card>
+</CardGroup>
+
+## Related Resources
+
+- [Image Configuration Schema](../reference/imageconfig-schema)
+- [Building Images](../building/build-images)
+- [Image Customizer](../customization/image-customizer)

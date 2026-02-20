@@ -1,0 +1,229 @@
+---
+title: Package Generator (pkgworker)
+description: Worker tool for building RPM packages locally in chroot environments
+---
+
+Package Generator (pkgworker) is the core build worker that compiles individual RPM packages from SRPM source packages. It creates isolated chroot environments for each package build, ensuring clean and reproducible builds. This tool is typically invoked by the scheduler rather than run directly.
+
+## Usage
+
+```bash
+pkgworker \
+  --srpm-file <package.src.rpm> \
+  --work-dir <work-dir> \
+  --worker-tar <worker_chroot.tar.gz> \
+  --repo-file <local.repo> \
+  --rpm-dir <output-rpms> \
+  --srpm-dir <output-srpms> \
+  --toolchain-rpms-dir <toolchain-rpms> \
+  --cache-dir <cache-dir> \
+  --base-package-name <spec-name> \
+  --dist-tag <dist-tag> \
+  --distro-release-version <version> \
+  --distro-build-number <build-number> \
+  --timeout <duration> \
+  [options]
+```
+
+## Parameters
+
+<ParamField path="srpm-file" type="string" required>
+  Full path to the SRPM to build
+</ParamField>
+
+<ParamField path="work-dir" type="string" required>
+  The directory to create the build folder in
+</ParamField>
+
+<ParamField path="worker-tar" type="string" required>
+  Full path to worker_chroot.tar.gz containing the build environment
+</ParamField>
+
+<ParamField path="repo-file" type="string" required>
+  Full path to local.repo file for RPM dependencies
+</ParamField>
+
+<ParamField path="rpm-dir" type="string" required>
+  The directory to use as the local repo and to submit RPM packages to
+</ParamField>
+
+<ParamField path="srpm-dir" type="string" required>
+  The output directory for source RPM packages
+</ParamField>
+
+<ParamField path="toolchain-rpms-dir" type="string" required>
+  Directory that contains already built toolchain RPMs. Should contain a top level directory for each architecture.
+</ParamField>
+
+<ParamField path="cache-dir" type="string" required>
+  The cache directory containing downloaded dependency RPMS from Azure Linux Base
+</ParamField>
+
+<ParamField path="base-package-name" type="string" required>
+  The name of the spec file used to build this package without the extension
+</ParamField>
+
+<ParamField path="dist-tag" type="string" required>
+  The distribution tag the SPEC will be built with (e.g., .azl3)
+</ParamField>
+
+<ParamField path="distro-release-version" type="string" required>
+  The distro release version that the SRPM will be built with
+</ParamField>
+
+<ParamField path="distro-build-number" type="string" required>
+  The distro build number that the SRPM will be built with
+</ParamField>
+
+<ParamField path="timeout" type="duration" required>
+  Timeout for package building (e.g., 2h, 30m)
+</ParamField>
+
+<ParamField path="run-check" type="boolean">
+  Run the %check section during package build (runs package tests)
+</ParamField>
+
+<ParamField path="rpmmacros-file" type="string">
+  Optional file path to an rpmmacros file for rpmbuild to use
+</ParamField>
+
+<ParamField path="install-package" type="string">
+  Filepaths to RPM packages that should be installed before building (can be specified multiple times)
+</ParamField>
+
+<ParamField path="out-arch" type="string">
+  Architecture of resulting package
+</ParamField>
+
+<ParamField path="no-cleanup" type="boolean">
+  Whether or not to delete the chroot folder after the build is done
+</ParamField>
+
+<ParamField path="use-ccache" type="boolean">
+  Automatically install and use ccache during package builds
+</ParamField>
+
+<ParamField path="ccache-root-dir" type="string">
+  The directory used to store ccache outputs
+</ParamField>
+
+<ParamField path="ccache-config" type="string">
+  The configuration file for ccache
+</ParamField>
+
+<ParamField path="max-cpu" type="string">
+  Max number of CPUs used for package building
+</ParamField>
+
+<ParamField path="log-file" type="string">
+  Path to the log file
+</ParamField>
+
+<ParamField path="log-level" type="string">
+  Log level (panic, fatal, error, warn, info, debug, trace)
+</ParamField>
+
+## How It Works
+
+1. **Create Chroot**: Extracts worker_chroot.tar.gz to create an isolated build environment
+2. **Mount Dependencies**: Mounts local RPM repositories and toolchain directories into chroot
+3. **Install Build Dependencies**: Uses tdnf to install packages listed in BuildRequires
+4. **Build Package**: Runs rpmbuild to compile the package from source
+5. **Run Tests**: Optionally runs %check section if `--run-check` is specified
+6. **Extract Results**: Copies built RPMs to the output directory
+7. **Cleanup**: Removes chroot unless `--no-cleanup` is specified
+
+## Build Environment
+
+The worker chroot contains:
+- **Build Tools**: gcc, make, cmake, autotools, etc.
+- **Package Manager**: tdnf for installing dependencies
+- **RPM Tools**: rpmbuild, rpm, rpmspec
+- **Standard Libraries**: glibc, system headers, etc.
+
+## Ccache Support
+
+Pkgworker supports ccache to speed up rebuilds:
+
+```bash
+pkgworker \
+  --srpm-file mypackage.src.rpm \
+  --use-ccache \
+  --ccache-root-dir /var/cache/ccache \
+  --ccache-config ccache.conf \
+  [other options...]
+```
+
+Ccache is especially useful for:
+- Incremental builds during development
+- CI/CD pipelines with frequent rebuilds
+- Large C/C++ packages with long compile times
+
+## Example
+
+### Standard Package Build
+
+```bash
+pkgworker \
+  --srpm-file nginx-1.20.1-1.src.rpm \
+  --work-dir ./build/workers \
+  --worker-tar toolkit/worker_chroot.tar.gz \
+  --repo-file build/local.repo \
+  --rpm-dir build/rpms/x86_64 \
+  --srpm-dir build/srpms \
+  --toolchain-rpms-dir build/toolchain_rpms \
+  --cache-dir build/cached_rpms \
+  --base-package-name nginx \
+  --dist-tag .azl3 \
+  --distro-release-version 3.0 \
+  --distro-build-number 20240101 \
+  --timeout 2h \
+  --log-level info
+```
+
+### Build with Tests
+
+```bash
+pkgworker \
+  --srpm-file python3-1.0-1.src.rpm \
+  --run-check \
+  --work-dir ./build/workers \
+  [other required options...]
+```
+
+### Development Build (No Cleanup)
+
+```bash
+pkgworker \
+  --srpm-file mypackage-1.0-1.src.rpm \
+  --no-cleanup \
+  --work-dir ./build/workers \
+  [other required options...]
+```
+
+After the build, you can examine the chroot at `./build/workers/mypackage-1.0-1/` to debug build issues.
+
+## Output
+
+On successful build, pkgworker prints a comma-separated list of built RPM files to stdout:
+
+```
+mypackage-1.0-1.x86_64.rpm,mypackage-devel-1.0-1.x86_64.rpm,mypackage-debuginfo-1.0-1.x86_64.rpm
+```
+
+This output is used by the scheduler to track which packages were built.
+
+## Notes
+
+- This tool is typically invoked by the scheduler, not run directly by users
+- Requires root privileges for chroot operations
+- Each package builds in a clean, isolated environment
+- Build dependencies are automatically installed from available repositories
+- The `--timeout` parameter prevents runaway builds
+- Use `--no-cleanup` during development to inspect build artifacts
+- The `--run-check` flag runs package test suites, which may significantly increase build time
+
+## See Also
+
+- [Scheduler](/toolkit/scheduler) - Orchestrates pkgworker invocations
+- [Grapher](/toolkit/grapher) - Generates dependency graphs for the scheduler

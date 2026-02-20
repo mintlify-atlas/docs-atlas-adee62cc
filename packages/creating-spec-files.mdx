@@ -1,0 +1,686 @@
+---
+title: Creating RPM SPEC Files
+description: Complete guide to writing RPM SPEC files for Azure Linux packages with real-world examples
+---
+
+RPM SPEC files define how packages are built, installed, and distributed in Azure Linux. This guide covers the essential components and best practices for creating SPEC files.
+
+## SPEC File Structure
+
+A SPEC file is divided into several sections, each serving a specific purpose:
+
+```
+┌─────────────────────────────┐
+│ Preamble (Metadata)         │  ← Package info, dependencies
+├─────────────────────────────┤
+│ %description                │  ← What the package does
+├─────────────────────────────┤
+│ %prep                       │  ← Unpack and patch sources
+├─────────────────────────────┤
+│ %build                      │  ← Compile the software
+├─────────────────────────────┤
+│ %install                    │  ← Install into buildroot
+├─────────────────────────────┤
+│ %check                      │  ← Run test suite
+├─────────────────────────────┤
+│ %files                      │  ← List installed files
+├─────────────────────────────┤
+│ %changelog                  │  ← Version history
+└─────────────────────────────┘
+```
+
+## Preamble Section
+
+The preamble contains package metadata and dependencies.
+
+### Basic Metadata
+
+<Tabs>
+  <Tab title="Simple Package">
+    ```rpm
+    Summary:        Access control list utilities
+    Name:           acl
+    Version:        2.3.1
+    Release:        2%{?dist}
+    License:        GPLv2+
+    Vendor:         Microsoft Corporation
+    Distribution:   Azure Linux
+    Group:          System Environment/Base
+    URL:            https://savannah.nongnu.org/projects/acl/
+    Source0:        https://download.savannah.nongnu.org/releases/%{name}/%{name}-%{version}.tar.gz
+    
+    BuildRequires:  attr-devel
+    Requires:       libacl = %{version}-%{release}
+    
+    %description
+    This package contains the getfacl and setfacl utilities needed for
+    manipulating access control lists.
+    ```
+  </Tab>
+  
+  <Tab title="Complex Package">
+    ```rpm
+    Summary:        An URL retrieval utility and library
+    Name:           curl
+    Version:        8.11.1
+    Release:        5%{?dist}
+    License:        curl
+    Vendor:         Microsoft Corporation
+    Distribution:   Azure Linux
+    Group:          System Environment/NetworkingLibraries
+    URL:            https://curl.haxx.se
+    Source0:        https://curl.haxx.se/download/%{name}-%{version}.tar.gz
+    Patch0:         CVE-2025-0665.patch
+    Patch1:         CVE-2025-0167.patch
+    Patch2:         CVE-2025-0725.patch
+    
+    BuildRequires:  cmake
+    BuildRequires:  krb5-devel
+    BuildRequires:  openssl-devel
+    Requires:       curl-libs = %{version}-%{release}
+    Requires:       krb5
+    Requires:       openssl
+    
+    %description
+    The cURL package contains an utility and a library used for
+    transferring files with URL syntax to any of the following
+    protocols: FTP, FTPS, HTTP, HTTPS, SCP, SFTP, TFTP, TELNET,
+    DICT, LDAP, LDAPS and FILE.
+    ```
+  </Tab>
+  
+  <Tab title="Server Package">
+    ```rpm
+    %global nginx_user nginx
+    
+    Summary:        High-performance HTTP server and reverse proxy
+    Name:           nginx
+    Version:        1.28.1
+    Release:        1%{?dist}
+    License:        BSD-2-Clause
+    Vendor:         Microsoft Corporation
+    Distribution:   Azure Linux
+    Group:          Applications/System
+    URL:            https://nginx.org/
+    Source0:        https://nginx.org/download/%{name}-%{version}.tar.gz
+    Source1:        nginx.service
+    
+    BuildRequires:  openssl-devel
+    BuildRequires:  pcre2-devel
+    BuildRequires:  zlib-devel
+    Requires:       %{name}-filesystem = %{version}-%{release}
+    Requires:       %{name}-mimetypes
+    
+    %description
+    NGINX is a free, open-source, high-performance HTTP server and 
+    reverse proxy, as well as an IMAP/POP3 proxy server.
+    ```
+  </Tab>
+</Tabs>
+
+### Key Fields Explained
+
+<AccordionGroup>
+  <Accordion title="Summary">
+    A one-line description of the package (max 80 characters). Should be concise and informative.
+  </Accordion>
+  
+  <Accordion title="Name">
+    The package name. Must be lowercase, no spaces. Use hyphens for multi-word names.
+  </Accordion>
+  
+  <Accordion title="Version">
+    The upstream software version. Should match the upstream release exactly.
+  </Accordion>
+  
+  <Accordion title="Release">
+    Package release number. Start at `1%{?dist}` and increment for packaging changes. Reset to 1 when Version changes.
+  </Accordion>
+  
+  <Accordion title="License">
+    The software license. Use SPDX identifiers when possible (e.g., `MIT`, `GPL-2.0-or-later`, `Apache-2.0`).
+  </Accordion>
+  
+  <Accordion title="Source0, Source1, ...">
+    URLs or filenames of source archives. Use `%{name}` and `%{version}` macros for clarity.
+  </Accordion>
+  
+  <Accordion title="Patch0, Patch1, ...">
+    Patch files to apply to sources. Name patches descriptively (e.g., `CVE-2025-0665.patch`).
+  </Accordion>
+  
+  <Accordion title="BuildRequires">
+    Packages needed to compile the software. Each on a separate line for clarity.
+  </Accordion>
+  
+  <Accordion title="Requires">
+    Packages needed at runtime. Often auto-detected by RPM, but specify explicitly for clarity.
+  </Accordion>
+</AccordionGroup>
+
+## Subpackages
+
+Many packages split functionality into multiple RPMs using subpackages.
+
+<Tabs>
+  <Tab title="Library Subpackage">
+    ```rpm
+    %package libs
+    Summary:        Libraries for curl
+    Group:          System Environment/Libraries
+    Provides:       libcurl = %{version}-%{release}
+    
+    %description libs
+    This package contains minimal set of shared curl libraries.
+    
+    # Later in the file...
+    %files libs
+    %{_libdir}/libcurl.so.*
+    ```
+  </Tab>
+  
+  <Tab title="Devel Subpackage">
+    ```rpm
+    %package devel
+    Summary:        Libraries and header files for curl
+    Requires:       %{name} = %{version}-%{release}
+    Provides:       libcurl-devel = %{version}-%{release}
+    
+    %description devel
+    Static libraries and header files for the support library for curl
+    
+    # Later in the file...
+    %files devel
+    %defattr(-,root,root)
+    %{_libdir}/*.so
+    %{_libdir}/pkgconfig/*
+    %{_includedir}/*
+    %{_mandir}/man3/*
+    ```
+  </Tab>
+  
+  <Tab title="Filesystem Subpackage">
+    ```rpm
+    %package filesystem
+    Summary:        The basic directory layout for the Nginx server
+    BuildArch:      noarch
+    Requires(pre):  shadow-utils
+    
+    %description filesystem
+    The nginx-filesystem package contains the basic directory layout
+    for the Nginx server including the correct permissions for the
+    directories.
+    
+    %pre filesystem
+    getent group %{nginx_user} > /dev/null || groupadd -r %{nginx_user}
+    getent passwd %{nginx_user} > /dev/null || \
+        useradd -r -d %{_localstatedir}/lib/nginx -g %{nginx_user} \
+        -s /sbin/nologin -c "Nginx web server" %{nginx_user}
+    exit 0
+    
+    %files filesystem
+    %dir %{_sysconfdir}/%{name}
+    ```
+  </Tab>
+</Tabs>
+
+## Build Sections
+
+### %prep - Prepare Sources
+
+The `%prep` section unpacks sources and applies patches.
+
+<Tabs>
+  <Tab title="Simple Prep">
+    ```rpm
+    %prep
+    %autosetup
+    ```
+    This macro automatically:
+    - Unpacks Source0
+    - Changes to the unpacked directory
+    - Applies all patches in order
+  </Tab>
+  
+  <Tab title="Custom Prep">
+    ```rpm
+    %prep
+    %autosetup -p1
+    ```
+    The `-p1` flag strips one directory level from patch paths.
+  </Tab>
+  
+  <Tab title="Multiple Sources">
+    ```rpm
+    %prep
+    %autosetup -n inspektor-gadget-%{version}
+    %setup -q -n inspektor-gadget-%{version} -T -D -a 1
+    ```
+    - `-n`: Specify the directory name after unpacking
+    - `-T`: Don't unpack Source0 again
+    - `-D`: Don't delete the directory first
+    - `-a 1`: Unpack Source1
+  </Tab>
+</Tabs>
+
+### %build - Compile Software
+
+The `%build` section compiles the software.
+
+<Tabs>
+  <Tab title="Autotools Build">
+    ```rpm
+    %build
+    %configure \
+        --disable-static \
+        --enable-threaded-resolver \
+        --with-ssl \
+        --with-gssapi
+    %make_build
+    ```
+    Common for projects using `./configure && make`
+  </Tab>
+  
+  <Tab title="CMake Build">
+    ```rpm
+    %build
+    %cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_TESTING=OFF
+    %cmake_build
+    ```
+    For CMake-based projects
+  </Tab>
+  
+  <Tab title="Go Build">
+    ```rpm
+    %build
+    export CGO_ENABLED=0
+    go build \
+        -ldflags "-X main.version=v%{version}" \
+        -tags "netgo" \
+        -o ./bin/%{name} ./cmd/%{name}
+    ```
+    For Go applications
+  </Tab>
+  
+  <Tab title="Python Build">
+    ```rpm
+    %build
+    %py3_build
+    ```
+    For Python packages using setuptools
+  </Tab>
+  
+  <Tab title="Custom Build">
+    ```rpm
+    %build
+    sh configure \
+        --prefix=%{_prefix} \
+        --sbin-path=%{_sbindir}/nginx \
+        --with-http_ssl_module \
+        --with-http_v2_module
+    %make_build
+    ```
+    Custom configuration script
+  </Tab>
+</Tabs>
+
+### %install - Install Files
+
+The `%install` section copies built files to the buildroot.
+
+<Tabs>
+  <Tab title="Standard Install">
+    ```rpm
+    %install
+    %make_install
+    find %{buildroot} -type f -name "*.la" -delete -print
+    %{_fixperms} %{buildroot}/*
+    ```
+  </Tab>
+  
+  <Tab title="With Service File">
+    ```rpm
+    %install
+    %make_install
+    install -vdm755 %{buildroot}%{_libdir}/systemd/system
+    install -p -m 0644 %{SOURCE1} %{buildroot}%{_libdir}/systemd/system/nginx.service
+    
+    # Clean up
+    find %{buildroot} -type f -name "*.la" -delete -print
+    ```
+  </Tab>
+  
+  <Tab title="Manual Install">
+    ```rpm
+    %install
+    mkdir -p "%{buildroot}/%{_bindir}"
+    install -D -m0755 bin/build/ig %{buildroot}/%{_bindir}
+    
+    mkdir -p "%{buildroot}/%{_mandir}/man1"
+    install -m0644 docs/*.1 %{buildroot}/%{_mandir}/man1/
+    ```
+  </Tab>
+</Tabs>
+
+### %check - Run Tests
+
+The `%check` section runs the package test suite.
+
+<Tabs>
+  <Tab title="Simple Test">
+    ```rpm
+    %check
+    make test
+    ```
+  </Tab>
+  
+  <Tab title="Conditional Tests">
+    ```rpm
+    %if 0%{?with_check}
+    %check
+    make test
+    %endif
+    ```
+    Tests only run when `RUN_CHECK=y` is set
+  </Tab>
+  
+  <Tab title="Skipping Tests">
+    ```rpm
+    %check
+    # Skip test that requires network access
+    sed -e 's|test/network.test||' -i test/Makefile
+    make test
+    ```
+  </Tab>
+  
+  <Tab title="Complex Tests">
+    ```rpm
+    %check
+    export PYTHONPATH=%{buildroot}%{python3_sitelib}
+    pytest-3 tests/ -v
+    ```
+  </Tab>
+</Tabs>
+
+## File Listings
+
+The `%files` section declares which files belong to each package.
+
+### Path Macros
+
+Use RPM macros for standard paths:
+
+| Macro | Path | Usage |
+|-------|------|-------|
+| `%{_bindir}` | `/usr/bin` | User executables |
+| `%{_sbindir}` | `/usr/sbin` | System executables |
+| `%{_libdir}` | `/usr/lib64` or `/usr/lib` | Libraries |
+| `%{_includedir}` | `/usr/include` | Header files |
+| `%{_datadir}` | `/usr/share` | Architecture-independent data |
+| `%{_mandir}` | `/usr/share/man` | Man pages |
+| `%{_sysconfdir}` | `/etc` | Configuration files |
+| `%{_localstatedir}` | `/var` | Variable data |
+
+### File Attributes
+
+<Tabs>
+  <Tab title="Basic Files">
+    ```rpm
+    %files
+    %defattr(-,root,root)
+    %license COPYING
+    %{_bindir}/*
+    %{_mandir}/man1/*
+    ```
+  </Tab>
+  
+  <Tab title="Config Files">
+    ```rpm
+    %files
+    %defattr(-,root,root)
+    %config(noreplace) %{_sysconfdir}/%{name}/nginx.conf
+    %config(noreplace) %{_sysconfdir}/%{name}/fastcgi_params
+    ```
+    `noreplace` preserves user changes during upgrades
+  </Tab>
+  
+  <Tab title="Directories">
+    ```rpm
+    %files
+    %defattr(-,root,root)
+    %dir %{_sysconfdir}/%{name}
+    %dir %{_var}/log/%{name}
+    ```
+    Explicitly declare owned directories
+  </Tab>
+  
+  <Tab title="Documentation">
+    ```rpm
+    %files
+    %defattr(-,root,root)
+    %license LICENSE
+    %doc README.md CHANGELOG.md
+    %{_docdir}/%{name}-%{version}
+    ```
+  </Tab>
+</Tabs>
+
+## Changelog
+
+The `%changelog` section tracks package history in reverse chronological order.
+
+```rpm
+%changelog
+* Fri Jan 09 2026 Azure Linux Security Servicing Account <azurelinux-security@microsoft.com> - 8.11.1-5
+- Patch for CVE-2025-14017
+
+* Thu Sep 11 2025 Azure Linux Security Servicing Account <azurelinux-security@microsoft.com> - 8.11.1-4
+- Patch for CVE-2025-10148
+
+* Thu Feb 13 2025 Kanishk Bansal <kanbansal@microsoft.com> - 8.11.1-3
+- Fix CVE-2025-0665, CVE-2025-0167, CVE-2025-0725
+
+* Wed Feb 26 2025 Tobias Brick <tobiasb@microsoft.com> - 8.11.1-2
+- Add check section
+
+* Fri Feb 07 2025 Himaja Kesari <himajakesari@microsoft.com> - 8.11.1-1
+- Bump version to 8.11.1 to address CVE-2024-11053
+```
+
+### Changelog Format
+
+```
+* Day Month DD YYYY Name <email> - Version-Release
+- Change description
+- Another change
+```
+
+<Note>
+Date format must be: `DayOfWeek MonthName DD YYYY` (e.g., `Fri Jan 09 2026`)
+</Note>
+
+## Complete Examples
+
+<Tabs>
+  <Tab title="Simple Utility">
+    ```rpm
+    Summary:        Access control list utilities
+    Name:           acl
+    Version:        2.3.1
+    Release:        2%{?dist}
+    License:        GPLv2+
+    Vendor:         Microsoft Corporation
+    Distribution:   Azure Linux
+    Group:          System Environment/Base
+    URL:            https://savannah.nongnu.org/projects/acl/
+    Source0:        https://download.savannah.nongnu.org/releases/%{name}/%{name}-%{version}.tar.gz
+    BuildRequires:  attr-devel
+    Requires:       libacl = %{version}-%{release}
+    
+    %description
+    This package contains the getfacl and setfacl utilities needed for
+    manipulating access control lists.
+    
+    %prep
+    %autosetup
+    
+    %build
+    %configure
+    %make_build LIBTOOL="libtool --tag=CC"
+    
+    %install
+    %make_install
+    find %{buildroot} -type f -name "*.la" -delete -print
+    chmod 0755 %{buildroot}%{_libdir}/libacl.so.*.*.*
+    %find_lang %{name}
+    
+    %check
+    make test
+    
+    %files -f %{name}.lang
+    %license doc/COPYING*
+    %{_bindir}/chacl
+    %{_bindir}/getfacl
+    %{_bindir}/setfacl
+    %{_mandir}/man1/chacl.1*
+    
+    %changelog
+    * Wed Sep 20 2023 Jon Slobodzian <joslobo@microsoft.com> - 2.3.1-2
+    - Recompile with stack-protection fixed gcc version
+    
+    * Wed Nov 24 2021 Pawel Winogrodzki <pawelwi@microsoft.com> - 2.3.1-1
+    - Updating to version 2.3.1
+    ```
+  </Tab>
+  
+  <Tab title="Library with Subpackages">
+    ```rpm
+    Summary:        An URL retrieval utility and library
+    Name:           curl
+    Version:        8.11.1
+    Release:        5%{?dist}
+    License:        curl
+    Vendor:         Microsoft Corporation
+    Distribution:   Azure Linux
+    URL:            https://curl.haxx.se
+    Source0:        https://curl.haxx.se/download/%{name}-%{version}.tar.gz
+    BuildRequires:  openssl-devel
+    BuildRequires:  libssh2-devel
+    Requires:       curl-libs = %{version}-%{release}
+    
+    %description
+    The cURL package contains an utility and a library used for
+    transferring files with URL syntax.
+    
+    %package devel
+    Summary:        Libraries and header files for curl
+    Requires:       %{name} = %{version}-%{release}
+    
+    %description devel
+    Static libraries and header files for curl
+    
+    %package libs
+    Summary:        Libraries for curl
+    
+    %description libs
+    This package contains minimal set of shared curl libraries.
+    
+    %prep
+    %autosetup -p1
+    
+    %build
+    %configure \
+        --disable-static \
+        --enable-threaded-resolver \
+        --with-ssl
+    %make_build
+    
+    %check
+    make test
+    
+    %install
+    %make_install
+    find %{buildroot} -type f -name "*.la" -delete -print
+    
+    %ldconfig_scriptlets libs
+    
+    %files
+    %defattr(-,root,root)
+    %license COPYING
+    %{_bindir}/*
+    %{_mandir}/man1/*
+    
+    %files devel
+    %defattr(-,root,root)
+    %{_libdir}/*.so
+    %{_includedir}/*
+    
+    %files libs
+    %{_libdir}/libcurl.so.*
+    
+    %changelog
+    * Fri Jan 09 2026 Security Team <security@microsoft.com> - 8.11.1-5
+    - Patch for CVE-2025-14017
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Macros" icon="percent">
+    Always use RPM macros like `%{_bindir}` instead of hardcoded paths
+  </Card>
+  
+  <Card title="Clean Buildroot" icon="broom">
+    Remove .la files and fix permissions in %install
+  </Card>
+  
+  <Card title="License Files" icon="certificate">
+    Mark license files with `%license` directive
+  </Card>
+  
+  <Card title="Config Files" icon="gear">
+    Use `%config(noreplace)` for user-editable configs
+  </Card>
+  
+  <Card title="Test Coverage" icon="vial">
+    Always include a %check section when tests are available
+  </Card>
+  
+  <Card title="Detailed Changelog" icon="list">
+    Write clear, descriptive changelog entries
+  </Card>
+</CardGroup>
+
+## Common Pitfalls
+
+<Warning>
+**Don't hardcode paths** - Use macros like `%{_bindir}` instead of `/usr/bin`
+</Warning>
+
+<Warning>
+**Don't include buildroot in files** - The `%{buildroot}` is stripped automatically
+</Warning>
+
+<Warning>
+**Don't forget %defattr** - Always set default file attributes in %files
+</Warning>
+
+<Warning>
+**Don't skip changelog** - Every package change needs a changelog entry
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Package Repository" icon="database" href="/packages/package-repository">
+    Learn about repository structure and organization
+  </Card>
+  <Card title="SPECS vs SPECS-EXTENDED" icon="scale-balanced" href="/packages/specs-vs-extended">
+    Understand package support levels
+  </Card>
+</CardGroup>

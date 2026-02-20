@@ -1,0 +1,160 @@
+---
+title: Package Management Overview
+description: Learn about Azure Linux's RPM-based package management system, directory structure, and build workflow
+---
+
+Azure Linux uses RPM (Red Hat Package Manager) as its package management system. All packages are built from SPEC files that define how software is compiled, packaged, and installed on the system.
+
+## Package Organization
+
+Azure Linux packages are organized into two main directories:
+
+<CardGroup cols={2}>
+  <Card title="SPECS" icon="box">
+    Production-ready packages with full support and timely CVE maintenance
+  </Card>
+  <Card title="SPECS-EXTENDED" icon="flask">
+    Experimental packages for proof-of-concept and staging purposes
+  </Card>
+</CardGroup>
+
+### Package Directory Structure
+
+Each package lives in its own subdirectory to avoid naming conflicts:
+
+```
+SPECS/
+├── curl/
+│   ├── curl.spec
+│   ├── curl.signatures.json
+│   └── CVE-2025-0665.patch
+├── nginx/
+│   ├── nginx.spec
+│   ├── nginx.signatures.json
+│   └── nginx.service
+└── python3/
+    ├── python3.spec
+    ├── python3.signatures.json
+    └── cgi3.patch
+```
+
+## Key Components
+
+### SPEC Files
+
+SPEC files contain all the metadata and instructions needed to build an RPM package:
+
+- Package metadata (name, version, license, description)
+- Build dependencies and runtime requirements
+- Source file locations and patches
+- Build, installation, and testing instructions
+- File lists for the resulting packages
+- Changelog entries
+
+### Signature Files
+
+Each SPEC file is accompanied by a `*.signatures.json` file that records SHA-256 hashes of all source files. This ensures source integrity and prevents unauthorized modifications.
+
+```json
+{
+  "Signatures": {
+    "curl-8.11.1.tar.gz": "1234567890abcdef..."
+  }
+}
+```
+
+## Build System Workflow
+
+The Azure Linux build system follows this workflow:
+
+<Steps>
+  <Step title="SPEC File Creation">
+    Package maintainers create or update SPEC files with build instructions
+  </Step>
+  <Step title="Source Validation">
+    The `srpmpacker` tool validates source files against signature hashes
+  </Step>
+  <Step title="SRPM Generation">
+    SPEC files and sources are packaged into Source RPMs (SRPMs)
+  </Step>
+  <Step title="Binary Package Build">
+    SRPMs are compiled in isolated build environments to create binary RPMs
+  </Step>
+  <Step title="Testing">
+    Packages run through the `%check` section for validation
+  </Step>
+</Steps>
+
+## Package Support Levels
+
+| Directory | Published | Supported | Requirements |
+|-----------|-----------|-----------|--------------|
+| **SPECS** | Yes | Yes | - Viable upstream source with active CVE management<br/>- No project-specific code<br/>- Value for multiple use cases |
+| **SPECS-EXTENDED** | Yes | No | - Viable upstream source with active CVE management<br/>- No project-specific code<br/>- Can be used for staging packages |
+
+<Note>
+Packages in SPECS-EXTENDED can be graduated to SPECS after demonstrating their value and completing additional quality requirements.
+</Note>
+
+## Common Package Operations
+
+### Installing Packages
+
+Azure Linux uses `tdnf` (Tiny DNF) as its package manager:
+
+```bash
+# Install a package
+tdnf install curl
+
+# Update a package
+tdnf update curl
+
+# Remove a package
+tdnf remove curl
+
+# Search for packages
+tdnf search nginx
+```
+
+### Querying Package Information
+
+Use `rpm` commands to query package details:
+
+```bash
+# List installed packages
+rpm -qa
+
+# Show package information
+rpm -qi curl
+
+# List files in a package
+rpm -ql curl
+
+# Find which package owns a file
+rpm -qf /usr/bin/curl
+```
+
+## Source Management
+
+Package sources can be hosted in two locations:
+
+1. **Azure Linux Source Server**: `https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/`
+2. **Local SPECS Directory**: `SPECS/<package>/` for small patches and configuration files
+
+<Tip>
+Large source archives should be hosted on the source server. Only small files like patches should be stored directly in the SPECS directory.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SPECS vs SPECS-EXTENDED" icon="scale-balanced" href="/packages/specs-vs-extended">
+    Understand the differences between package directories
+  </Card>
+  <Card title="Creating SPEC Files" icon="file-code" href="/packages/creating-spec-files">
+    Learn how to write RPM SPEC files
+  </Card>
+  <Card title="Package Repository" icon="database" href="/packages/package-repository">
+    Explore the repository structure and organization
+  </Card>
+</CardGroup>

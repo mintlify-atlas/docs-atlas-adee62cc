@@ -1,0 +1,104 @@
+---
+title: AMD Hardware Support
+description: Configure and install AMD GPU drivers on Azure Linux
+---
+
+## Overview
+
+Azure Linux provides AMD GPU driver packages through the AMD RPM repository at [packages.microsoft.com](https://packages.microsoft.com/azurelinux/3.0/prod/amd/). This guide covers how to install and configure AMD GPU support.
+
+## Installation
+
+### Register AMD Repository and Install Drivers
+
+Install the AMD repository configuration and the AMDGPU driver package:
+
+```bash
+sudo tdnf install -y azurelinux-repos-amd
+sudo tdnf install -y amdgpu
+```
+
+### Loading Kernel Modules
+
+For packages from March 2025 and later (amdgpu-6.10.5.60302_2109964-1_6.6.78.1.3.azl3.x86_64.rpm and newer), kernel modules are loaded automatically.
+
+For earlier packages, you must manually load the kernel module or reboot:
+
+```bash
+sudo modprobe amdgpu
+```
+
+Or reboot the system:
+
+```bash
+sudo reboot
+```
+
+## Installing for Older Kernels
+
+If you need to install drivers for a specific kernel version, follow these steps:
+
+1. Check your current kernel version:
+
+```bash
+uname -a
+```
+
+Example output: `6.6.64.2-9.azl3`
+
+2. List available driver versions:
+
+```bash
+tdnf list amdgpu
+```
+
+3. Install the driver version matching your kernel:
+
+```bash
+# Example for kernel 6.6.64.2-9.azl3
+sudo tdnf install amdgpu-6.8.5.60202_2078359
+```
+
+The package naming convention includes the kernel version, so select the package that corresponds to your running kernel.
+
+## Verification
+
+After installation, verify the AMD GPU driver is loaded:
+
+```bash
+lsmod | grep amdgpu
+```
+
+Check the driver version:
+
+```bash
+modinfo amdgpu
+```
+
+## Troubleshooting
+
+### Driver Not Loading
+
+If the driver doesn't load automatically:
+
+1. Check kernel logs for errors:
+
+```bash
+dmesg | grep amdgpu
+```
+
+2. Manually load the module:
+
+```bash
+sudo modprobe amdgpu
+```
+
+3. Verify the module loaded successfully:
+
+```bash
+lsmod | grep amdgpu
+```
+
+### Package Version Mismatch
+
+Ensure the AMDGPU package version matches your kernel version. Use `tdnf list amdgpu` to see all available versions and select the appropriate one.

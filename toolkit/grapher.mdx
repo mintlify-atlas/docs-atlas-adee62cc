@@ -1,0 +1,130 @@
+---
+title: Grapher
+description: Dependency graph generation tool for Azure Linux package builds
+---
+
+Grapher is a dependency graph generation tool that creates a directed acyclic graph (DAG) representing the build dependencies between packages in Azure Linux. It processes SRPM metadata and generates a DOT format graph file that is used by the scheduler to determine build order.
+
+## Usage
+
+```bash
+grapher --input <packages.json> --output <graph.dot> [options]
+```
+
+## Parameters
+
+<ParamField path="input" type="string" required>
+  Input JSON file listing all local SRPMs
+</ParamField>
+
+<ParamField path="output" type="string" required>
+  Output DOT graph file path
+</ParamField>
+
+<ParamField path="rpm-dir" type="string" required>
+  Directory containing already built RPMs. Should contain top-level directories for each architecture.
+</ParamField>
+
+<ParamField path="toolchain-rpms-dir" type="string" required>
+  Directory containing already built toolchain RPMs. Should contain top-level directories for each architecture.
+</ParamField>
+
+<ParamField path="tdnf-worker" type="string" required>
+  Full path to worker_chroot.tar.gz
+</ParamField>
+
+<ParamField path="repo-file" type="string" required>
+  Full path to a repo file (can be specified multiple times)
+</ParamField>
+
+<ParamField path="strict-goals" type="boolean">
+  Don't allow missing goal packages
+</ParamField>
+
+<ParamField path="strict-unresolved" type="boolean">
+  Don't allow missing unresolved packages
+</ParamField>
+
+<ParamField path="resolve-cycles-from-upstream" type="boolean">
+  Let grapher resolve cycles by marking RPMs available in upstream repos as remote
+</ParamField>
+
+<ParamField path="out-dir" type="string">
+  Directory to download packages into
+</ParamField>
+
+<ParamField path="tmp-dir" type="string">
+  Directory to store temporary files while downloading
+</ParamField>
+
+<ParamField path="use-preview-repo" type="boolean">
+  Pull packages from the upstream preview repo
+</ParamField>
+
+<ParamField path="disable-default-repos" type="boolean">
+  Disable pulling packages from PMC repos
+</ParamField>
+
+<ParamField path="ignore-version-to-resolve-selfdep" type="boolean">
+  Ignore package version while downloading package from upstream when resolving cycles
+</ParamField>
+
+<ParamField path="repo-snapshot-time" type="string">
+  Optional: Repo time limit for tdnf virtual snapshot
+</ParamField>
+
+<ParamField path="tls-cert" type="string">
+  TLS client certificate to use when downloading files
+</ParamField>
+
+<ParamField path="tls-key" type="string">
+  TLS client key to use when downloading files
+</ParamField>
+
+<ParamField path="timestamp-file" type="string">
+  File that stores timestamps for this program
+</ParamField>
+
+<ParamField path="log-file" type="string">
+  Path to the log file
+</ParamField>
+
+<ParamField path="log-level" type="string">
+  Log level (panic, fatal, error, warn, info, debug, trace)
+</ParamField>
+
+## How It Works
+
+1. **Parse Input**: Reads the package JSON file containing metadata for all local SRPMs
+2. **Build Graph**: Creates nodes for each package with run, build, and test dependencies
+3. **Add Dependencies**: Connects nodes based on their runtime, build-time, and test-time requirements
+4. **Resolve Cycles**: Optionally resolves circular dependencies by marking packages available in upstream repos as remote
+5. **Output**: Writes the final dependency graph in DOT format
+
+## Graph Node Types
+
+- **Run Node**: Represents the runtime requirements of a package
+- **Build Node**: Represents the build-time requirements
+- **Test Node**: Represents the test-time requirements (optional)
+- **Remote/Unresolved Node**: Packages that will be pulled from upstream repositories
+
+## Example
+
+```bash
+grapher \
+  --input build/pkg_artifacts/graph_external_deps.json \
+  --output build/pkg_artifacts/graph.dot \
+  --rpm-dir build/rpms \
+  --toolchain-rpms-dir build/toolchain_rpms \
+  --tdnf-worker toolkit/worker_chroot.tar.gz \
+  --repo-file build/local.repo \
+  --resolve-cycles-from-upstream \
+  --log-level info
+```
+
+## Notes
+
+- The output graph is used as input to the scheduler tool for building packages
+- Use `--strict-goals` and `--strict-unresolved` flags during development to catch missing dependencies early
+- The `--resolve-cycles-from-upstream` flag is useful when dealing with circular dependencies by pulling some packages from upstream repos
+- Graph cycles must be resolved before the scheduler can process the build

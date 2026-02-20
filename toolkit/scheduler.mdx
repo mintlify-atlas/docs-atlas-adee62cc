@@ -1,0 +1,403 @@
+---
+title: Build Scheduler
+description: Orchestrates parallel package builds from dependency graphs
+---
+
+The Build Scheduler is the orchestration engine that manages the parallel building of packages in Azure Linux. It reads a dependency graph from the grapher tool and intelligently schedules package builds across multiple workers, respecting dependencies and maximizing parallelism.
+
+## Usage
+
+```bash
+scheduler \
+  --input <graph.dot> \
+  --output <built-graph.dot> \
+  --output-build-state-csv-file <build-state.csv> \
+  --work-dir <work-dir> \
+  --worker-tar <worker_chroot.tar.gz> \
+  --repo-file <local.repo> \
+  --rpm-dir <rpms-dir> \
+  --toolchain-rpms-dir <toolchain-dir> \
+  --srpm-dir <srpms-dir> \
+  --cache-dir <cache-dir> \
+  --build-logs-dir <logs-dir> \
+  --dist-tag <dist-tag> \
+  --distro-release-version <version> \
+  --distro-build-number <build-number> \
+  --build-agent <agent-type> \
+  [options]
+```
+
+## Core Parameters
+
+<ParamField path="input" type="string" required>
+  Path to the DOT graph file to build (output from grapher)
+</ParamField>
+
+<ParamField path="output" type="string" required>
+  Path to save the built DOT graph file
+</ParamField>
+
+<ParamField path="output-build-state-csv-file" type="string" required>
+  Path to save the CSV file with build state information
+</ParamField>
+
+<ParamField path="work-dir" type="string" required>
+  The directory to create the build folder
+</ParamField>
+
+<ParamField path="worker-tar" type="string" required>
+  Full path to worker_chroot.tar.gz
+</ParamField>
+
+<ParamField path="repo-file" type="string" required>
+  Full path to local.repo
+</ParamField>
+
+<ParamField path="rpm-dir" type="string" required>
+  The directory to use as the local repo and to submit RPM packages to
+</ParamField>
+
+<ParamField path="toolchain-rpms-dir" type="string" required>
+  Directory that contains already built toolchain RPMs. Should contain top level directories for architecture.
+</ParamField>
+
+<ParamField path="srpm-dir" type="string" required>
+  The output directory for source RPM packages
+</ParamField>
+
+<ParamField path="cache-dir" type="string" required>
+  The cache directory containing downloaded dependency RPMS from Azure Linux Base
+</ParamField>
+
+<ParamField path="build-logs-dir" type="string" required>
+  Directory to store package build logs
+</ParamField>
+
+<ParamField path="dist-tag" type="string" required>
+  The distribution tag SRPMs will be built with (e.g., .azl3)
+</ParamField>
+
+<ParamField path="distro-release-version" type="string" required>
+  The distro release version that the SRPM will be built with
+</ParamField>
+
+<ParamField path="distro-build-number" type="string" required>
+  The distro build number that the SRPM will be built with
+</ParamField>
+
+<ParamField path="build-agent" type="string" required>
+  Type of build agent to build packages with. Options: `chroot`, `test`
+</ParamField>
+
+## Build Control Parameters
+
+<ParamField path="workers" type="int" default="0">
+  Number of concurrent build agents to spawn. If set to 0, automatically sets to the logical CPU count.
+</ParamField>
+
+<ParamField path="build-attempts" type="int" default="1">
+  Sets the number of times to try building a package before giving up
+</ParamField>
+
+<ParamField path="check-attempts" type="int" default="1">
+  Sets the minimum number of times to test a package if the tests fail
+</ParamField>
+
+<ParamField path="max-cascading-rebuilds" type="int">
+  Sets the maximum number of cascading dependency rebuilds caused by a package being rebuilt (leave unset for unbounded)
+</ParamField>
+
+<ParamField path="extra-layers" type="int" default="0">
+  Sets the number of additional layers in the graph beyond the goal packages to build
+</ParamField>
+
+<ParamField path="timeout" type="duration" default="99h">
+  Max duration for any individual package build/test (e.g., 2h, 30m)
+</ParamField>
+
+<ParamField path="max-cpu" type="string">
+  Max number of CPUs used for package building
+</ParamField>
+
+## Package Selection Parameters
+
+<ParamField path="packages" type="string">
+  Space separated list of top-level packages that should be built. Omit to build all packages.
+</ParamField>
+
+<ParamField path="rebuild-packages" type="string">
+  Space separated list of base package names that should be rebuilt
+</ParamField>
+
+<ParamField path="ignored-packages" type="string">
+  Space separated list of specs ignoring rebuilds if their dependencies have been updated
+</ParamField>
+
+<ParamField path="image-config-file" type="string">
+  Optional image config file to extract a package list from
+</ParamField>
+
+<ParamField path="base-dir" type="string">
+  Base directory for relative file paths from the config. Defaults to config's directory.
+</ParamField>
+
+## Test Parameters
+
+<ParamField path="tests" type="string">
+  Space separated list of tests that should be run. Omit to run package tests.
+</ParamField>
+
+<ParamField path="rerun-tests" type="string">
+  Space separated list of package tests that should be re-run
+</ParamField>
+
+<ParamField path="ignored-tests" type="string">
+  Space separated list of package tests that should not be run
+</ParamField>
+
+## Build Options
+
+<ParamField path="stop-on-failure" type="boolean">
+  Stop the entire build on first package failure
+</ParamField>
+
+<ParamField path="no-cleanup" type="boolean">
+  Don't delete the chroot folders after builds are done
+</ParamField>
+
+<ParamField path="no-cache" type="boolean">
+  Disables using prebuilt cached packages
+</ParamField>
+
+<ParamField path="optimize-with-cached-implicit" type="boolean">
+  Optimize the build process by allowing cached implicit packages to optimize the initial build graph
+</ParamField>
+
+<ParamField path="allow-toolchain-rebuilds" type="boolean">
+  Allow toolchain packages to rebuild without causing an error
+</ParamField>
+
+<ParamField path="toolchain-manifest" type="string">
+  Path to a list of RPMs which are created by the toolchain. RPMs from this list are considered 'prebuilt' and will not be rebuilt.
+</ParamField>
+
+## Ccache Parameters
+
+<ParamField path="use-ccache" type="boolean">
+  Automatically install and use ccache during package builds
+</ParamField>
+
+<ParamField path="ccache-dir" type="string">
+  The directory used to store ccache outputs
+</ParamField>
+
+<ParamField path="ccache-config" type="string">
+  The ccache configuration file path
+</ParamField>
+
+## License Checking
+
+<ParamField path="license-check-mode" type="string" default="default">
+  Do additional validation of licenses after the build. Options: `none`, `warn`, `error`, `default`
+</ParamField>
+
+<ParamField path="license-check-name-file" type="string">
+  File containing license names to check for
+</ParamField>
+
+<ParamField path="license-check-exception-file" type="string">
+  File containing license exceptions
+</ParamField>
+
+<ParamField path="license-results-file" type="string">
+  File to save the license check results to
+</ParamField>
+
+<ParamField path="license-summary-file" type="string">
+  File to save the license check summary to
+</ParamField>
+
+## Advanced Parameters
+
+<ParamField path="rpmmacros-file" type="string">
+  Optional file path to an rpmmacros file for rpmbuild to use
+</ParamField>
+
+<ParamField path="build-agent-program" type="string">
+  Path to the build agent that will be invoked to build packages
+</ParamField>
+
+<ParamField path="timestamp-file" type="string">
+  File that stores timestamps for this program
+</ParamField>
+
+<ParamField path="log-file" type="string">
+  Path to the log file
+</ParamField>
+
+<ParamField path="log-level" type="string">
+  Log level (panic, fatal, error, warn, info, debug, trace)
+</ParamField>
+
+## How It Works
+
+1. **Load Graph**: Reads the dependency graph from the grapher tool
+2. **Initialize Build State**: Determines which packages need to be built
+3. **Start Workers**: Spawns the specified number of build worker processes
+4. **Schedule Builds**: Identifies leaf nodes (packages with all dependencies met) and assigns them to workers
+5. **Monitor Progress**: Tracks build results and updates the graph
+6. **Handle Dependencies**: As packages complete, unblocks dependent packages
+7. **Cascade Updates**: Optionally rebuilds packages whose dependencies changed
+8. **Finalize**: Saves the final graph and build state CSV
+
+## Build Agents
+
+### Chroot Agent
+The standard build agent that uses chroot environments (via pkgworker):
+- Isolated build environments
+- Full RPM build support
+- Suitable for production builds
+
+### Test Agent
+A simplified agent for testing the scheduler:
+- Mocks package builds
+- Useful for debugging scheduler logic
+- Not for production use
+
+## Example Usage
+
+### Standard Full Build
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --output-build-state-csv-file build/pkg_artifacts/build_state.csv \
+  --work-dir build/worker_chroots \
+  --worker-tar toolkit/worker_chroot.tar.gz \
+  --repo-file build/local.repo \
+  --rpm-dir build/rpms \
+  --toolchain-rpms-dir out/toolchain_rpms \
+  --srpm-dir build/srpms \
+  --cache-dir build/rpm_cache \
+  --build-logs-dir build/logs \
+  --dist-tag .azl3 \
+  --distro-release-version 3.0 \
+  --distro-build-number 20240101 \
+  --build-agent chroot \
+  --workers 8 \
+  --log-level info
+```
+
+### Build Specific Packages
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --packages "nginx python3 openssl" \
+  [other required options...]
+```
+
+### Build with Tests
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --tests "python3 openssl" \
+  --check-attempts 3 \
+  [other required options...]
+```
+
+### Rebuild Specific Packages
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --rebuild-packages "kernel systemd" \
+  --max-cascading-rebuilds 50 \
+  [other required options...]
+```
+
+### Development Build with Ccache
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --use-ccache \
+  --ccache-dir /var/cache/ccache \
+  --no-cleanup \
+  --stop-on-failure \
+  --build-attempts 3 \
+  [other required options...]
+```
+
+### Build from Image Config
+
+```bash
+scheduler \
+  --input build/pkg_artifacts/graph.dot \
+  --output build/pkg_artifacts/built_graph.dot \
+  --image-config-file imageconfigs/core.json \
+  --base-dir imageconfigs \
+  [other required options...]
+```
+
+## Build State CSV
+
+The scheduler generates a CSV file with the following information for each package:
+- Package name and version
+- Build status (success, failed, cached, skipped)
+- Build time
+- Dependencies
+- Build attempt number
+
+This file is useful for:
+- Tracking build progress
+- Analyzing build performance
+- Identifying problematic packages
+- CI/CD reporting
+
+## Worker Pool Management
+
+The scheduler manages a pool of concurrent workers:
+- **Automatic Scaling**: Set `--workers 0` to use all available CPU cores
+- **Resource Control**: Use `--max-cpu` to limit CPU usage per package
+- **Timeout Protection**: `--timeout` prevents runaway builds
+- **Retry Logic**: `--build-attempts` handles transient failures
+
+## Build Optimization
+
+### Caching
+- Use `--no-cache` to force rebuild all packages
+- Default behavior reuses already-built packages when possible
+- `--optimize-with-cached-implicit` enables aggressive graph pruning
+
+### Cascading Rebuilds
+When a package is rebuilt, its dependents may also need rebuilding:
+- `--max-cascading-rebuilds` limits the cascade depth
+- Prevents excessive rebuilds in large dependency chains
+- Set to 0 to disable cascading rebuilds entirely
+
+### Toolchain Handling
+- `--toolchain-manifest` lists packages considered "prebuilt"
+- `--allow-toolchain-rebuilds` permits rebuilding toolchain packages
+- Toolchain packages are typically built separately and reused
+
+## Notes
+
+- The scheduler automatically handles build parallelism based on the dependency graph
+- Failed builds can be retried with `--build-attempts`
+- Use `--stop-on-failure` in CI/CD to fail fast
+- The `--no-cleanup` flag is useful for debugging build failures
+- License checking can be enforced to ensure compliance
+- Build logs for each package are saved in `--build-logs-dir`
+- The scheduler gracefully handles SIGINT/SIGTERM for clean shutdown
+
+## See Also
+
+- [Grapher](/toolkit/grapher) - Generates input dependency graphs
+- [Package Generator](/toolkit/pkggen) - The worker that builds individual packages

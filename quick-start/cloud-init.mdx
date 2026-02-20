@@ -1,0 +1,226 @@
+---
+title: Cloud-init Configuration
+description: Guide to configuring cloud-init for Azure Linux images
+---
+
+Cloud-init is used to provision user accounts and perform initial system configuration in Azure Linux VHD/VHDX images. This guide shows you how to build and configure the `meta-user-data.iso` image.
+
+## Overview
+
+VHD and VHDX images built from the Azure Linux toolkit do not include a default user account. To sign in to these images, you must:
+
+1. Edit the cloud-init user-data configuration file
+2. Build the `meta-user-data.iso` image
+3. Mount the ISO to your VM's CD drive
+
+The cloud-init service will automatically detect the ISO and provision user accounts based on your configuration.
+
+## Edit User Data Configuration
+
+<Warning>
+The cloud-init configuration file does not build by default. You must edit it to set a username and password or SSH key before building.
+</Warning>
+
+The user-data configuration file is located at:
+
+```bash
+./toolkit/resources/assets/meta-user-data/user-data
+```
+
+### Example Configuration
+
+```yaml
+#cloud-config
+users:
+ - default
+ - name: <YOUR USERNAME HERE>
+   shell: /bin/bash
+   sudo: [ "ALL=(ALL:ALL) ALL" ]
+   lock_passwd: false
+   # The usage of plain_text_password and passwd is not permitted in the production setting.
+   # ssh-authorized-keys should be used instead for enhanced security.
+   plain_text_passwd: <YOUR PASSWORD HERE. NOT RECOMMENDED>
+   groups: sudo, docker
+ - name: sshuser
+   shell: /bin/bash
+   sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
+   lock_passwd: true
+   groups: sudo, docker
+   ssh_authorized_keys:
+    - ssh-rsa <YOUR SSH KEY HERE>
+packages:
+ - openssh-server
+runcmd:
+ - sudo systemctl start sshd
+ - sudo systemctl stop waagent || true
+ - sudo systemctl disable waagent || true
+```
+
+## Configuration Options
+
+### User with Password Authentication
+
+For development and testing environments:
+
+```yaml
+users:
+ - name: myuser
+   shell: /bin/bash
+   sudo: [ "ALL=(ALL:ALL) ALL" ]
+   lock_passwd: false
+   plain_text_passwd: mypassword
+   groups: sudo, docker
+```
+
+<Warning>
+Using `plain_text_passwd` is **NOT recommended** for production environments. Use SSH keys instead for enhanced security.
+</Warning>
+
+### User with SSH Key Authentication
+
+For production environments (recommended):
+
+```yaml
+users:
+ - name: sshuser
+   shell: /bin/bash
+   sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
+   lock_passwd: true
+   groups: sudo, docker
+   ssh_authorized_keys:
+    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... user@host
+```
+
+### Common User Options
+
+- `name` - Username for the account
+- `shell` - Default shell (typically `/bin/bash`)
+- `sudo` - Sudo privileges configuration
+- `lock_passwd` - Set to `true` to disable password authentication
+- `plain_text_passwd` - Plain text password (not recommended for production)
+- `groups` - Additional groups to add the user to
+- `ssh_authorized_keys` - List of SSH public keys for key-based authentication
+
+## Build Meta-User-Data ISO
+
+After editing the user-data configuration, build the ISO:
+
+<Steps>
+  <Step title="Navigate to toolkit directory">
+    ```bash
+    cd toolkit
+    ```
+  </Step>
+
+  <Step title="Build the ISO">
+    ```bash
+    # The output image is ../out/images/meta-user-data.iso
+    sudo make meta-user-data
+    ```
+  </Step>
+
+  <Step title="Verify output">
+    The ISO will be created at:
+    ```bash
+    ../out/images/meta-user-data.iso
+    ```
+  </Step>
+</Steps>
+
+## Mount ISO to VM
+
+### For Hyper-V Virtual Machines
+
+<Steps>
+  <Step title="Open VM Settings">
+    Right-click your virtual machine from Hyper-V Manager and select **Settings...**.
+  </Step>
+
+  <Step title="Select DVD Drive">
+    - For Gen1/VHD images: Select **DVD Drive** nested under **IDE Controller 1**
+    - For Gen2/VHDX images: Select **DVD Drive** nested under **SCSI Controller**
+    
+    <Note>
+    For Generation 2 VMs, you may need to add a DVD drive first. Select the SCSI Controller, then select DVD Drive and press **Add**.
+    </Note>
+  </Step>
+
+  <Step title="Attach ISO">
+    1. Select **Image File:**
+    2. Browse to the `meta-user-data.iso` file
+    3. Select **Apply** to apply all changes
+  </Step>
+</Steps>
+
+## Boot and Verify
+
+<Steps>
+  <Step title="Start the VM">
+    Right-click your VM and select **Connect...**, then select **Start**.
+  </Step>
+
+  <Step title="Wait for cloud-init">
+    Cloud-init will automatically run on first boot and provision the user accounts. This may take a few moments.
+  </Step>
+
+  <Step title="Sign in">
+    Once the login prompt appears, sign in with the username and password (or SSH key) you configured in the user-data file.
+  </Step>
+</Steps>
+
+<Note>
+Cloud-init runs only on the first boot. After the initial provisioning, you can unmount the `meta-user-data.iso` if desired.
+</Note>
+
+## Additional Packages and Commands
+
+The cloud-init configuration supports installing packages and running commands on first boot:
+
+### Install Additional Packages
+
+```yaml
+packages:
+ - openssh-server
+ - git
+ - vim
+ - curl
+```
+
+### Run Commands on First Boot
+
+```yaml
+runcmd:
+ - sudo systemctl start sshd
+ - sudo systemctl enable sshd
+ - echo "Setup complete" > /tmp/cloud-init-done
+```
+
+## Troubleshooting
+
+### Cloud-init Logs
+
+If you encounter issues, check the cloud-init logs:
+
+```bash
+# View cloud-init output
+sudo cat /var/log/cloud-init-output.log
+
+# View cloud-init logs
+sudo cat /var/log/cloud-init.log
+```
+
+### Verify Cloud-init Status
+
+```bash
+# Check cloud-init status
+cloud-init status
+
+# View detailed status
+cloud-init status --long
+```
+
+### Common Issues
+
+- **No user provisioned**: Verify the ISO is mounted to the VM's DVD drive
+- **Cannot sign in**: Check the user-data syntax and ensure credentials are correct
+- **Cloud-init not running**: Ensure the VM has internet access if packages need to be installed

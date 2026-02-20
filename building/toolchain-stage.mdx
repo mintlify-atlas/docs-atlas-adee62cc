@@ -1,0 +1,147 @@
+---
+title: Toolchain Build Stage
+description: Building or populating the Azure Linux toolchain
+---
+
+The toolchain stage builds the compiler and build tools needed to build all other Azure Linux packages. This stage can either populate from pre-built binaries or build everything from scratch.
+
+## Toolchain Build Phases
+
+The toolchain builds in two sub-phases:
+
+1. **Bootstrap Phase** - Builds an initial bootstrap toolchain from upstream sources
+2. **Final Phase** - Uses the bootstrap toolchain to build the final toolchain used in package building
+
+## Populate Toolchain (Fast)
+
+The fastest way to get started is to download pre-built toolchain binaries. This happens automatically when `REBUILD_TOOLCHAIN=n` (the default).
+
+<Steps>
+  <Step title="Populate from binaries">
+    Download and populate the toolchain from pre-existing binaries:
+    ```bash
+    sudo make toolchain REBUILD_TOOLS=y
+    ```
+    This command downloads toolchain packages from packages.microsoft.com and extracts them locally.
+  </Step>
+
+  <Step title="Verify toolchain">
+    The toolchain RPMs are populated in:
+    ```
+    ../build/toolchain_rpms/
+    ├── x86_64/
+    └── noarch/
+    ```
+  </Step>
+</Steps>
+
+<Note>
+This is the recommended approach for most users and takes only a few minutes compared to several hours for a full rebuild.
+</Note>
+
+## Rebuild Toolchain (Complete)
+
+For a complete from-scratch build, you can rebuild the entire toolchain. Depending on hardware, this can take several hours.
+
+<Steps>
+  <Step title="Build from scratch">
+    Build the entire toolchain locally:
+    ```bash
+    sudo make toolchain REBUILD_TOOLS=y REBUILD_TOOLCHAIN=y
+    ```
+  </Step>
+
+  <Step title="Monitor progress">
+    The build process will:
+    1. Create a bootstrap toolchain in a Docker container
+    2. Use the bootstrap toolchain to build the final toolchain
+    3. Extract the final toolchain RPMs
+
+    Build logs are available in:
+    ```
+    ../build/logs/toolchain/
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+A full toolchain rebuild can take 4-6 hours or more depending on your system. Only do this if you need to modify toolchain packages.
+</Warning>
+
+## Incremental Toolchain Builds
+
+When modifying toolchain packages, you can use incremental builds to save time:
+
+```bash
+sudo make toolchain REBUILD_TOOLS=y REBUILD_TOOLCHAIN=y \
+  INCREMENTAL_TOOLCHAIN=y ALLOW_TOOLCHAIN_DOWNLOAD_FAIL=y
+```
+
+This approach:
+- Downloads as many toolchain RPMs as possible from upstream
+- Only rebuilds the packages that have changed locally
+- Significantly reduces build time compared to a full rebuild
+
+## Using Daily Build Toolchain
+
+You can use toolchain packages from daily builds:
+
+```bash
+sudo make toolchain REBUILD_TOOLS=y DAILY_BUILD_ID=lkg
+```
+
+Or specify a specific date:
+```bash
+sudo make toolchain REBUILD_TOOLS=y DAILY_BUILD_ID=3-0-20240227
+```
+
+## Common Toolchain Variables
+
+### REBUILD_TOOLCHAIN
+- **`n`** (default) - Download pre-built toolchain packages
+- **`y`** - Build toolchain from scratch
+
+### REBUILD_TOOLS
+- **`n`** (default) - Use pre-compiled Go binaries from SDK
+- **`y`** - Build Go tools from source
+
+### INCREMENTAL_TOOLCHAIN
+- **`n`** (default) - Full clean rebuild of toolchain
+- **`y`** - Reuse existing toolchain RPMs where possible
+
+### ALLOW_TOOLCHAIN_DOWNLOAD_FAIL
+- **`n`** (default) - Don't download toolchain packages during incremental builds
+- **`y`** - Download and cache as many toolchain packages as possible
+
+## Toolchain Package Sources
+
+By default, toolchain packages are downloaded from:
+```makefile
+PACKAGE_URL_LIST = https://packages.microsoft.com/azurelinux/3.0/prod/base/$(build_arch)
+```
+
+You can override this with custom URLs:
+```bash
+sudo make toolchain REBUILD_TOOLS=y \
+  PACKAGE_URL_LIST="https://your-custom-repo.com/azurelinux/3.0/prod/base/x86_64"
+```
+
+## Caching Toolchain Artifacts
+
+To save toolchain artifacts for reuse:
+
+```bash
+# Compress toolchain for caching
+sudo make compress-toolchain CACHE_DIR=~/cache
+
+# Later, restore from cache
+sudo make hydrate-toolchain \
+  TOOLCHAIN_CONTAINER_ARCHIVE=~/cache/toolchain_from_container.tar.gz \
+  TOOLCHAIN_ARCHIVE=~/cache/toolchain_built_rpms_all.tar.gz
+```
+
+## Next Steps
+
+After the toolchain is built or populated, proceed to:
+- [Package Build Stage](/building/package-stage) - Build Azure Linux packages
+- Review [Build Variables](/building/build-variables) for more configuration options

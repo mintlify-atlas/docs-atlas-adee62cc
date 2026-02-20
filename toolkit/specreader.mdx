@@ -1,0 +1,308 @@
+---
+title: "Spec Reader"
+description: "Parse RPM spec files and dependencies into JSON format"
+---
+
+Spec Reader parses RPM spec files and their dependencies, generating a structured JSON representation suitable for build planning and dependency analysis.
+
+## Overview
+
+Spec Reader is a critical component of the Azure Linux build system that:
+
+- Parses RPM spec files to extract package metadata
+- Resolves build and runtime dependencies
+- Generates JSON output for build orchestration
+- Supports parallel processing for improved performance
+- Handles toolchain and pre-built package detection
+
+## Usage
+
+```bash
+specreader [flags]
+```
+
+## Parameters
+
+### Required Parameters
+
+<ParamField path="--input" type="string" required>
+  Directory to scan for SPEC files.
+</ParamField>
+
+<ParamField path="--output" type="string" required>
+  Output file path to export the JSON results.
+</ParamField>
+
+<ParamField path="--srpm-dir" type="string" required>
+  Directory containing source RPMs (SRPMs).
+</ParamField>
+
+<ParamField path="--rpm-dir" type="string" required>
+  Directory containing built binary RPMs.
+</ParamField>
+
+<ParamField path="--toolchain-rpms-dir" type="string" required>
+  Directory containing pre-built toolchain RPMs. Should contain top-level directories for each architecture.
+</ParamField>
+
+<ParamField path="--dist-tag" type="string" required>
+  The distribution tag the spec files will be built with (e.g., `azl3`).
+</ParamField>
+
+### Optional Parameters
+
+<ParamField path="--spec-list" type="string">
+  Path to a file containing a list of specific spec files to parse. If empty, all specs in the input directory will be parsed.
+</ParamField>
+
+<ParamField path="--workers" type="number" default="100">
+  Number of concurrent goroutines to use for parsing. Adjust based on available CPU cores.
+</ParamField>
+
+<ParamField path="--build-dir" type="string">
+  Directory to store temporary files while parsing. Required if using a worker chroot.
+</ParamField>
+
+<ParamField path="--worker-tar" type="string">
+  Full path to `worker_chroot.tar.gz`. If empty, specs will be parsed in the host environment (less isolated but faster).
+</ParamField>
+
+<ParamField path="--toolchain-manifest" type="string">
+  Path to a file listing RPMs created by the toolchain. These RPMs will be marked as pre-built in the output.
+</ParamField>
+
+<ParamField path="--target-arch" type="string">
+  The target architecture for the RPM binaries (e.g., `x86_64`, `aarch64`).
+</ParamField>
+
+<ParamField path="--run-check" type="boolean" default="false">
+  Whether to run the spec file's `%check` section during package build analysis.
+</ParamField>
+
+### Logging and Profiling
+
+<ParamField path="--log-file" type="string">
+  Path to file for log output.
+</ParamField>
+
+<ParamField path="--log-level" type="string" default="info">
+  Log level: panic, fatal, error, warn, info, debug, trace.
+</ParamField>
+
+<ParamField path="--timestamp-file" type="string">
+  File to store timing information for performance analysis.
+</ParamField>
+
+<ParamField path="--prof-cpu" type="string">
+  Path to save CPU profiling data.
+</ParamField>
+
+<ParamField path="--prof-mem" type="string">
+  Path to save memory profiling data.
+</ParamField>
+
+## Examples
+
+### Basic Parsing
+
+Parse all spec files in a directory:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3
+```
+
+### Parse Specific Specs
+
+Parse only specific spec files listed in a file:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --spec-list ./build/specs-to-build.txt \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3
+```
+
+### Using Worker Chroot
+
+Parse specs in an isolated chroot environment for better consistency:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --build-dir ./build/spec-parsing \
+  --worker-tar ./build/worker_chroot.tar.gz \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3
+```
+
+### With Toolchain Manifest
+
+Mark toolchain packages as pre-built:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --toolchain-manifest ./build/toolchain-packages.txt \
+  --dist-tag azl3
+```
+
+### Parallel Processing
+
+Adjust worker count for faster parsing on multi-core systems:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --workers 200 \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3
+```
+
+### Cross-Architecture Build
+
+Parse specs for a different target architecture:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph-aarch64.json \
+  --target-arch aarch64 \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS/aarch64 \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3
+```
+
+### With Performance Profiling
+
+Profile the parsing process:
+
+```bash
+specreader \
+  --input ./SPECS \
+  --output ./build/graph.json \
+  --srpm-dir ./build/SRPMS \
+  --rpm-dir ./build/RPMS \
+  --toolchain-rpms-dir ./build/toolchain \
+  --dist-tag azl3 \
+  --timestamp-file ./build/timings.txt \
+  --prof-cpu ./build/cpu.prof \
+  --prof-mem ./build/mem.prof
+```
+
+## Output Format
+
+Spec Reader generates a JSON file containing structured information about packages, including:
+
+- Package names and versions
+- Build and runtime dependencies
+- Architecture information
+- Source and binary RPM relationships
+- Toolchain package markers
+
+### Example Output Structure
+
+```json
+{
+  "packages": [
+    {
+      "name": "example-package",
+      "version": "1.0.0",
+      "release": "1",
+      "arch": "x86_64",
+      "buildRequires": ["gcc", "make"],
+      "requires": ["glibc"],
+      "srpm": "example-package-1.0.0-1.src.rpm",
+      "isToolchain": false
+    }
+  ]
+}
+```
+
+## Spec List File Format
+
+The spec list file should contain one spec file name per line (without the .spec extension):
+
+```text
+python
+kernel
+gcc
+glibc
+```
+
+## Worker Chroot
+
+Using a worker chroot provides several benefits:
+
+- **Isolation**: Specs are parsed in a clean, consistent environment
+- **Reproducibility**: Results are not affected by host system packages
+- **Safety**: Prevents spec parsing from affecting the host system
+
+<Info>
+  Parsing without a worker chroot is faster but less isolated. Use a worker chroot for production builds to ensure consistency.
+</Info>
+
+## Performance Tuning
+
+### Worker Count
+
+The `--workers` flag controls parallelism:
+
+- **Default**: 100 workers
+- **Low-core systems**: Use 50-100 workers
+- **High-core systems**: Use 200+ workers
+- **Memory-constrained**: Reduce workers to avoid OOM errors
+
+### Build Directory
+
+Place the build directory on fast storage (SSD) for better performance.
+
+## Troubleshooting
+
+### Out of Memory
+
+Reduce the number of workers:
+
+```bash
+--workers 50
+```
+
+### Slow Parsing
+
+- Increase worker count on multi-core systems
+- Use faster storage for build directory
+- Parse without worker chroot (less safe but faster)
+
+### Missing Dependencies
+
+Ensure all required directories contain the necessary RPMs:
+
+- Check `--srpm-dir` contains source RPMs
+- Check `--rpm-dir` contains built RPMs
+- Check `--toolchain-rpms-dir` contains toolchain packages
+
+## Related Tools
+
+- [Grapher](/toolkit/grapher) - Build dependency graphs from spec data
+- [Scheduler](/toolkit/scheduler) - Schedule package builds based on dependencies
+- [License Check](/toolkit/licensecheck) - Validate RPM license files

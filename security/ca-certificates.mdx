@@ -1,0 +1,176 @@
+---
+title: CA Certificate Management
+description: Managing SSL/TLS CA certificates in Azure Linux including custom certificates and legacy support
+---
+
+Azure Linux uses the `ca-certificates` package to manage SSL/TLS certificate authorities (CAs) for secure communications.
+
+## The ca-certificates Package
+
+The certificate package is split into multiple components:
+
+### ca-certificates-base
+
+The minimal certificate package containing only the CAs required by package management tools to authenticate Azure Linux package repositories.
+
+### ca-certificates
+
+The full certificate bundle containing CAs trusted through the [Microsoft Trusted Root Program](https://docs.microsoft.com/en-us/security/trusted-root/release-notes). This package automatically includes `ca-certificates-base`.
+
+<Warning>
+The `ca-certificates-base` package contains the minimum certificates needed for system updates. Removing this package will break package management functionality.
+</Warning>
+
+### ca-certificates-tools
+
+Provides utilities for managing custom certificates, including the `update-ca-trust` command.
+
+## Certificate Locations
+
+Azure Linux stores certificate trust information in two primary locations:
+
+| Location | Priority | Purpose |
+|----------|----------|---------|
+| `/etc/pki/ca-trust/source/` | High | User-added certificates and trust settings (PEM format) |
+| `/usr/share/pki/ca-trust-source/` | Normal | System-provided certificates |
+
+Certificates in `/etc/pki/ca-trust/source/` are interpreted with higher priority than those in `/usr/share/pki/ca-trust-source/`.
+
+## Adding Custom Certificates
+
+### Standard PEM/DER Format
+
+To add a certificate in standard PEM or DER format:
+
+```bash
+# Copy certificate to the anchors directory
+sudo cp my-certificate.crt /etc/pki/ca-trust/source/anchors/
+
+# Update the certificate bundle
+sudo update-ca-trust
+```
+
+### Extended BEGIN TRUSTED Format
+
+For certificates in extended format (with distrust/blacklist flags or non-TLS trust settings):
+
+```bash
+# Copy certificate to the source directory
+sudo cp my-certificate.crt /etc/pki/ca-trust/source/
+
+# Update the certificate bundle
+sudo update-ca-trust
+```
+
+<Warning>
+Always run `update-ca-trust` after adding, removing, or modifying certificates. Applications will continue using the old certificate bundle until you run this command.
+</Warning>
+
+## Certificate Bundle Location
+
+After running `update-ca-trust`, the consolidated certificate bundle is available at:
+
+```
+/etc/pki/tls/certs/ca-bundle.crt
+```
+
+Most applications read certificates from this bundle file.
+
+## Legacy Certificate Support
+
+Some applications require certificates in single-file-per-certificate format rather than a bundled format. The `ca-certificates-legacy` package provides this compatibility.
+
+### Installing Legacy Support
+
+```bash
+sudo tdnf install ca-certificates-legacy
+```
+
+The `ca-certificates-legacy` package automatically extracts and updates individual certificates whenever the main `ca-certificates` or `ca-certificates-base` packages are modified.
+
+### Manual Legacy Update
+
+<Warning>
+After manually installing a trust anchor, you must run both `update-ca-trust` and `bundle2pem.sh` for the certificate to be available in legacy format.
+</Warning>
+
+```bash
+# 1. Copy your certificate
+sudo cp my-certificate.crt /etc/pki/ca-trust/source/anchors/
+
+# 2. Update the bundle
+sudo update-ca-trust
+
+# 3. Extract to legacy format
+sudo bundle2pem.sh /etc/pki/tls/certs/ca-bundle.crt
+```
+
+## Removing Certificates
+
+To remove a custom certificate:
+
+```bash
+# Remove the certificate file
+sudo rm /etc/pki/ca-trust/source/anchors/my-certificate.crt
+
+# Update the bundle
+sudo update-ca-trust
+
+# If using legacy format, also run:
+sudo bundle2pem.sh /etc/pki/tls/certs/ca-bundle.crt
+```
+
+## Debugging Certificate Issues
+
+To get detailed debug output from p11-kit tools:
+
+```bash
+# Set debug environment variable
+export P11_KIT_DEBUG=all
+export DEST=/etc/pki/ca-trust/extracted
+
+# Run p11-kit extract with debug output
+sudo -E /usr/bin/p11-kit extract \
+  --format=pem-bundle \
+  --filter=ca-anchors \
+  --overwrite \
+  --comment \
+  --purpose server-auth \
+  $DEST/pem/tls-ca-bundle.pem
+```
+
+This will display detailed information about certificate processing and trust decisions.
+
+## Verifying Certificates
+
+To verify a certificate is trusted:
+
+```bash
+# List all trusted certificates
+trust list
+
+# Check a specific certificate
+openssl verify -CAfile /etc/pki/tls/certs/ca-bundle.crt my-certificate.crt
+
+# View certificate details
+openssl x509 -in my-certificate.crt -text -noout
+```
+
+## Common Issues
+
+### Certificate Not Trusted
+
+If a certificate isn't being trusted:
+
+1. Verify the certificate is in the correct directory
+2. Ensure `update-ca-trust` was run
+3. Check certificate format (must be PEM or DER)
+4. Verify the certificate is valid and not expired
+
+### Application Can't Find Certificates
+
+Some applications may look for certificates in non-standard locations. You can:
+
+1. Create a symlink to the standard bundle location
+2. Install `ca-certificates-legacy` for single-file format
+3. Configure the application to use `/etc/pki/tls/certs/ca-bundle.crt`

@@ -1,0 +1,89 @@
+---
+title: Azure Linux
+description: An internal Linux distribution for Microsoft's cloud infrastructure and edge products and services
+---
+
+<Note>
+Azure Linux is designed to provide a consistent platform for cloud devices and services and enhances Microsoft's ability to stay current on Linux updates.
+</Note>
+
+## What is Azure Linux?
+
+Azure Linux is an internal Linux distribution for Microsoft's cloud infrastructure and edge products and services. Azure Linux is designed to provide a consistent platform for these devices and services and will enhance Microsoft's ability to stay current on Linux updates. This initiative is part of Microsoft's increasing investment in a wide range of Linux technologies, such as [SONiC](https://azure.microsoft.com/en-us/blog/sonic-the-networking-switch-software-that-powers-the-microsoft-global-cloud/) and [Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/about).
+
+Azure Linux is being shared publicly as part of Microsoft's commitment to Open Source and to contribute back to the Linux community. Azure Linux does not change our approach or commitment to any existing third-party Linux distribution offerings.
+
+## Core capabilities
+
+<CardGroup cols={2}>
+  <Card title="Package generation" icon="box">
+    Produces the desired set of RPM packages from SPEC files and source files
+  </Card>
+  <Card title="Image generation" icon="compact-disc">
+    Produces the desired image artifacts like ISOs or VHDs from a given set of packages
+  </Card>
+  <Card title="Minimal footprint" icon="feather">
+    Consumes limited disk and memory resources with faster boot times
+  </Card>
+  <Card title="Security focused" icon="shield">
+    Provides a minimal attack surface with fewer services and attack vectors
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Lightweight architecture
+
+Whether deployed as a container or a container host, Azure Linux consumes limited disk and memory resources. The lightweight characteristics of Azure Linux also provides faster boot times and a minimal attack surface. By focusing the features in the core image to just what is needed for our internal cloud customers there are fewer services to load, and fewer attack vectors.
+
+### Flexible package system
+
+Azure Linux has been engineered with the notion that a small common core set of packages can address the universal needs of first party cloud and edge services while allowing individual teams to layer additional packages on top of the common core to produce images for their workloads.
+
+### Dual update models
+
+When security vulnerabilities arise, Azure Linux supports both a package-based update model and an image based update model. Leveraging the common [RPM Package Manager](https://rpm.org/) system, Azure Linux makes the latest security patches and fixes available for download with the goal of fast turn-around times.
+
+## Build system overview
+
+The Azure Linux build system enables a simple build process that consists of several phases:
+
+<Steps>
+  <Step title="Toolchain stage">
+    Builds a bootstrap toolchain and then builds the official toolchain. The official toolchain is used in the subsequent package build stage. Building is highly scripted and serialized in this stage.
+  </Step>
+  <Step title="Package stage">
+    Uses outputs from the toolchain stage to build any package not built in toolchain stage. Packages are built in parallel during this stage.
+  </Step>
+  <Step title="Image stage">
+    Generates the resulting ISO, VHD, VHDX, and/or container images from the rpm packages built in the package stage.
+  </Step>
+</Steps>
+
+Each stage can be built completely from scratch, or in many cases may be seeded from pre-built packages and then partially built.
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Getting started" icon="rocket" href="/getting-started">
+    Quick start guide to download, build, and run Azure Linux
+  </Card>
+  <Card title="Build guide" icon="hammer" href="/building/overview">
+    Learn how to build Azure Linux end-to-end
+  </Card>
+  <Card title="Security features" icon="lock" href="/security/features">
+    Explore the built-in security capabilities
+  </Card>
+  <Card title="How it works" icon="gears" href="/how-it-works/introduction">
+    Deep dive into the build system architecture
+  </Card>
+</CardGroup>
+
+## Acknowledgments
+
+Any Linux distribution, including Azure Linux, benefits from contributions by the open software community. We gratefully acknowledge all contributions made from the broader open source community, in particular:
+
+- [GNU](https://www.gnu.org/) and the [Free Software Foundation](https://www.fsf.org/)
+- [The Fedora Project](https://start.fedoraproject.org/) for SPEC files, particularly with respect to Qt, DNF and content in the SPECS-EXTENDED folder
+- The [Photon OS Project](https://vmware.github.io/photon/) for SPEC files originating from the Photon distribution
+- [Linux from Scratch](http://www.linuxfromscratch.org)

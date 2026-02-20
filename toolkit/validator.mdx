@@ -1,0 +1,266 @@
+---
+title: "Validator"
+description: "Validate image configuration files before building"
+---
+
+The Image Config Validator (also known as `imageconfigvalidator`) checks Azure Linux image configuration files for correctness and common errors before starting a build.
+
+## Overview
+
+The validator performs sanity checks on image configuration files to catch errors early:
+
+- Validates configuration structure and syntax
+- Checks package list consistency
+- Verifies kernel and boot requirements
+- Validates partitioning for kickstart installations
+- Ensures required packages are present
+
+## Usage
+
+```bash
+imageconfigvalidator [flags]
+```
+
+## Parameters
+
+### Required Parameters
+
+<ParamField path="--input" type="string" required>
+  Path to the image configuration file to validate (typically a `.json` or `.yaml` file).
+</ParamField>
+
+<ParamField path="--base-dir" type="string" required>
+  Base directory for resolving relative file paths referenced in the configuration.
+</ParamField>
+
+### Optional Parameters
+
+<ParamField path="--timestamp-file" type="string">
+  File to store timing information for performance analysis.
+</ParamField>
+
+### Logging and Profiling
+
+<ParamField path="--log-file" type="string">
+  Path to file for log output.
+</ParamField>
+
+<ParamField path="--log-level" type="string" default="info">
+  Log level: panic, fatal, error, warn, info, debug, trace.
+</ParamField>
+
+<ParamField path="--prof-cpu" type="string">
+  Path to save CPU profiling data.
+</ParamField>
+
+<ParamField path="--prof-mem" type="string">
+  Path to save memory profiling data.
+</ParamField>
+
+## Examples
+
+### Basic Validation
+
+Validate an image configuration file:
+
+```bash
+imageconfigvalidator \
+  --input ./config/image.json \
+  --base-dir ./config
+```
+
+### Validate with Logging
+
+Enable detailed logging during validation:
+
+```bash
+imageconfigvalidator \
+  --input ./config/image.json \
+  --base-dir ./config \
+  --log-level debug \
+  --log-file ./validation.log
+```
+
+### Validate with Timing
+
+Capture timing information:
+
+```bash
+imageconfigvalidator \
+  --input ./config/image.json \
+  --base-dir ./config \
+  --timestamp-file ./validation-timings.txt
+```
+
+## Validation Checks
+
+The validator performs the following checks:
+
+### 1. Configuration Structure
+
+Verifies the configuration file is well-formed and contains required fields.
+
+### 2. Package Validation
+
+Checks that package lists are consistent and complete:
+
+#### Kernel Package
+
+<Warning>
+  The kernel should **not** be included in package lists. It must be specified via the `KernelOptions` configuration instead.
+</Warning>
+
+```json
+// Incorrect
+{
+  "packages": ["kernel", "systemd", "bash"]
+}
+
+// Correct
+{
+  "packages": ["systemd", "bash"],
+  "kernelOptions": {
+    "package": "kernel"
+  }
+}
+```
+
+#### FIPS Requirements
+
+If FIPS mode is enabled (via `fips=1` kernel parameter or `EnableFIPS`), the validator ensures:
+
+- The `dracut-fips` package is included in the package list
+
+#### SELinux Requirements
+
+If SELinux is enabled (not set to `off`), the validator checks:
+
+- The SELinux policy package is included (default: `selinux-policy-targeted`)
+
+#### User/Group Requirements
+
+If users or groups are configured in the image, the validator ensures:
+
+- The `shadow-utils` package is included (provides `useradd`, `groupadd`, etc.)
+
+### 3. Kickstart Installation Validation
+
+For kickstart-based installations:
+
+<Warning>
+  When using kickstart installation (`IsKickStartBoot: true`), the image config must **not** specify partition information. Partitioning is handled by the kickstart preinstall script.
+</Warning>
+
+```json
+// Incorrect - specifies both kickstart and partitions
+{
+  "systemConfig": {
+    "isKickStartBoot": true,
+    "partitionSettings": [...]
+  },
+  "disks": [...]
+}
+
+// Correct - kickstart without partitions
+{
+  "systemConfig": {
+    "isKickStartBoot": true
+  }
+}
+```
+
+### 4. File Path Resolution
+
+Validates that all file paths referenced in the configuration exist and are accessible relative to the base directory.
+
+## Exit Codes
+
+The validator uses the following exit codes:
+
+- **0** - Configuration is valid
+- **1** - Configuration is invalid or validation failed
+
+## Common Validation Errors
+
+### Kernel in Package List
+
+**Error:**
+```
+kernel should not be included in a package list, add via config file's [KernelOptions] entry
+```
+
+**Fix:** Remove `kernel` from package lists and specify it in `kernelOptions`.
+
+### Missing dracut-fips
+
+**Error:**
+```
+'fips=1' provided on kernel cmdline, but 'dracut-fips' package is not included
+```
+
+**Fix:** Add `dracut-fips` to your package list when enabling FIPS.
+
+### Missing SELinux Policy
+
+**Error:**
+```
+[SELinux] selected, but 'selinux-policy-targeted' package is not included
+```
+
+**Fix:** Add the appropriate SELinux policy package to your package list.
+
+### Missing shadow-utils
+
+**Error:**
+```
+the 'shadow-utils' package must be included when the image is configured to add users or groups
+```
+
+**Fix:** Add `shadow-utils` to your package list if you're creating users or groups.
+
+### Kickstart with Partitions
+
+**Error:**
+```
+partition should not be specified in image config file when performing kickstart installation
+```
+
+**Fix:** Remove `disks` and `partitionSettings` from your configuration when using kickstart.
+
+## Integration with Build Process
+
+The validator should be run before starting an image build:
+
+```bash
+# Validate first
+imageconfigvalidator --input config/image.json --base-dir config
+
+# If validation passes, proceed with build
+if [ $? -eq 0 ]; then
+  imagegen --config config/image.json ...
+fi
+```
+
+## Best Practices
+
+1. **Validate early**: Run the validator before starting expensive build operations
+2. **Use absolute paths**: Provide absolute paths or use `--base-dir` consistently
+3. **Check dependencies**: Ensure all required packages are in package lists
+4. **Version control**: Keep validated configurations in version control
+5. **CI/CD integration**: Add validation as a pre-build step in your pipeline
+
+## Configuration File Structure
+
+For details on image configuration file format, see:
+
+- [Image Configuration Overview](/image-config/overview)
+- [System Configuration](/image-config/system-config)
+- [Package Lists](/image-config/package-lists)
+- [Disks and Partitions](/image-config/disks-partitions)
+
+## Related Tools
+
+- [Image Generator](/toolkit/imagegen) - Build images from validated configurations
+- [Image Customizer](/toolkit/imagecustomizer) - Customize existing images
+- [License Check](/toolkit/licensecheck) - Validate RPM license files
+- [Spec Reader](/toolkit/specreader) - Parse RPM spec files

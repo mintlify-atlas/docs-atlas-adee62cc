@@ -1,0 +1,388 @@
+---
+title: Understanding Build Logs
+description: How to interpret common build errors and resolve circular dependencies in Azure Linux
+---
+
+Build logs provide critical information about what's happening during the build process. This page helps you understand common errors and how to resolve them.
+
+## Log Locations
+
+Build logs are organized by build phase:
+
+```
+./../build/logs/
+├── pkggen/
+│   ├── rpmbuilding/
+│   │   ├── <package-name>.log    # Individual package build logs
+│   │   └── failures.txt          # Summary of failed packages
+│   ├── graphpkgfetcher.log       # Dependency resolution
+│   ├── scheduler.log             # Build orchestration
+│   └── specreader.log            # Spec parsing
+├── imagegen/
+│   ├── imagepkgfetcher.log       # Image package resolution
+│   ├── imager.log                # Image composition
+│   └── roast.log                 # Format conversion
+└── toolchain/
+    └── toolchain_build.log       # Toolchain building
+```
+
+<Tip>
+When a build fails, check the most recent `.log` file in the relevant directory. The error is usually near the end of the file.
+</Tip>
+
+## Common Error: Unresolvable Circular Dependencies
+
+The most common build error is an unresolvable circular dependency in the dependency graph.
+
+### Example Error
+
+```
+ERRO[0011][grapher] Unfixable circular dependency found:
+{bpftool-6.6.2.1-2.azl3-RUN<Meta>} --> {systemd-devel-255-2.azl3-BUILD<Build>} -->
+{systemd-devel-255-2.azl3-RUN<Meta>} --> {grub2-rpm-macros-2.06-13.azl3-BUILD<Build>} -->
+{grub2-rpm-macros-2.06-13.azl3-RUN<Meta>} --> {bpftool-6.6.2.1-2.azl3-BUILD<Build>}
+
+error: cycle can't be resolved with prebuilt/PMC RPMs. Unresolvable
+```
+
+### What This Means
+
+This is a **build-time** circular dependency. The toolkit doesn't allow circular build-time dependencies (circular run-time dependencies are allowed).
+
+<Warning>
+**Key Distinction:** Runtime circular dependencies are OK (packages can depend on each other when installed). Build-time circular dependencies are fatal (packages can't depend on each other to build).
+</Warning>
+
+### Reading the Error
+
+Errors are easier to understand when read **backwards** (from the end):
+
+<Steps>
+  <Step title="Package 1 depends on Package 2">
+    ```
+    {grub2-rpm-macros-RUN} --> {bpftool-BUILD}
+    ```
+    `bpftool` (1) depends on `grub2-rpm-macros` (2) **to build**
+  </Step>
+  
+  <Step title="Package 2 depends on Package 3">
+    ```
+    {systemd-devel-RUN} --> {grub2-rpm-macros-BUILD}
+    ```
+    `grub2-rpm-macros` (2) depends on `systemd-devel` (3) **to build**
+  </Step>
+  
+  <Step title="Package 3 closes the cycle">
+    ```
+    {bpftool-RUN} --> {systemd-devel-BUILD}
+    ```
+    `systemd-devel` (3) depends on `bpftool` (1) **to build** — **cycle complete!**
+  </Step>
+</Steps>
+
+### Understanding the Node Format
+
+Each node in the error uses this format: `{package-name-version-NODE_TYPE<State>}`
+
+**Node Types:**
+- `BUILD<Build>` - Represents building the package
+- `RUN<Meta>` - Represents the runnable/installable package
+
+**Edge meanings:**
+- `{XXX-RUN} --> {YYY-BUILD}` - YYY has a **build-time** dependency on XXX
+- `{XXX-RUN} --> {YYY-RUN}` - YYY has a **runtime** dependency on XXX  
+- `{XXX-BUILD} --> {XXX-RUN}` - XXX must be built before it can be used
+
+<Accordion title="Complete Node Type Reference">
+For full details on graph nodes, see the [Package Building Process](./package-building) documentation.
+
+**All Node Types:**
+- **TypeLocalBuild** - Local package that can be built
+- **TypeLocalRun** - Local package that can be installed/used
+- **TypeRemoteRun** - Package that must be downloaded from remote
+- **TypeGoal** - Special node grouping packages together
+- **TypePureMeta** - Organizational node for resolving cycles
+
+**All Node States:**
+- **StateBuild** - Should be built
+- **StateBuildError** - Build failed despite dependencies being met
+- **StateUpToDate** - Already available locally
+- **StateMeta** - Organizational/ordering node
+- **StateUnresolved** - No source found yet (for remote nodes)
+- **StateCached** - Downloaded and cached locally (for remote nodes)
+</Accordion>
+
+### How to Fix Circular Dependencies
+
+There are several strategies to break circular build dependencies:
+
+<AccordionGroup>
+  <Accordion title="1. Review BuildRequires">
+    **Most Common Fix** - Remove unnecessary build dependencies
+    
+    Check each package's `BuildRequires` in the spec files. Often a build dependency is listed but not actually needed for compilation.
+    
+    ```spec
+    # Before - unnecessary dependency
+    BuildRequires: systemd-devel
+    BuildRequires: bpftool
+    
+    # After - removed if not needed
+    BuildRequires: systemd-devel
+    ```
+  </Accordion>
+  
+  <Accordion title="2. Create Bootstrap Packages">
+    **For Complex Cycles** - Split packages into bootstrap and regular versions
+    
+    Create a `-bootstrap` variant that builds with minimal dependencies, then have other packages use the bootstrap version.
+    
+    **Example:** `systemd-bootstrap` 
+    - Builds without certain features
+    - Provides what other packages need to build
+    - Full `systemd` then builds using `systemd-bootstrap`
+    
+    **Common for:** Compilers, interpreters, core system tools
+  </Accordion>
+  
+  <Accordion title="3. Move to Runtime Dependencies">
+    If a dependency is only needed at runtime (not for compilation), move it from `BuildRequires` to `Requires`
+    
+    ```spec
+    # Before - needed at runtime, not build time
+    BuildRequires: some-tool
+    
+    # After - moved to runtime
+    Requires: some-tool
+    ```
+    
+    This breaks the build-time cycle while maintaining the runtime dependency.
+  </Accordion>
+  
+  <Accordion title="4. Use Conditional Dependencies">
+    For optional features that create cycles, make them conditional
+    
+    ```spec
+    # Add a build option to disable the feature causing the cycle
+    %bcond_with feature_causing_cycle
+    
+    %if %{with feature_causing_cycle}
+    BuildRequires: problematic-package
+    %endif
+    ```
+    
+    Build without the feature initially, then rebuild with it enabled after dependencies are available.
+  </Accordion>
+</AccordionGroup>
+
+## Other Common Errors
+
+<AccordionGroup>
+  <Accordion title="Missing Source File (404 Error)">
+    **Error:**
+    ```
+    ERROR: Failed to download source file 'example-1.0.0.tar.gz'
+    ERROR: No matching hash found on source server
+    ERROR: Expected hash: sha256:abc123...
+    ```
+    
+    **Causes:**
+    - Source file not available locally
+    - Hash in `*.signatures.json` doesn't match any available source
+    - Source server doesn't have the file
+    
+    **Solutions:**
+    1. Check if source file exists in the spec directory
+    2. Verify hash in `*.signatures.json` is correct
+    3. Download correct source file manually to spec directory
+    4. Use `SRPM_FILE_SIGNATURE_HANDLING=update` to update signature
+    
+    See [Local Package Handling](./local-packages) for more on signatures.
+  </Accordion>
+  
+  <Accordion title="Unresolved Package Dependency">
+    **Error:**
+    ```
+    ERROR: Failed to resolve dependency: some-package >= 1.2.3
+    ERROR: No package found matching requirements
+    ```
+    
+    **Causes:**
+    - Required package not built locally
+    - Package not available in remote repositories
+    - Version constraint too strict
+    
+    **Solutions:**
+    1. Check if package spec exists in `SPECS/` directory
+    2. Verify package is included in build list
+    3. Check if package is available in remote repos
+    4. Add package to `REPO_LIST` if in a custom repository
+    5. Relax version constraints if too strict
+  </Accordion>
+  
+  <Accordion title="Package Build Failure">
+    **Error:**
+    ```
+    ERROR: Package build failed: example-1.0.0-1
+    ERROR: See ./../build/logs/pkggen/rpmbuilding/example.log
+    ```
+    
+    **Causes:**
+    - Compilation errors in source code
+    - Missing build dependencies
+    - Incorrect build flags or configuration
+    - Environment-specific issues
+    
+    **Solutions:**
+    1. Check the package-specific log file for detailed errors
+    2. Verify all `BuildRequires` are correct
+    3. Test build manually in a chroot environment
+    4. Check for patches that may need updating
+    5. Review spec file for errors in build section
+    
+    ```bash
+    # View detailed build log
+    less ./../build/logs/pkggen/rpmbuilding/example.log
+    
+    # Look for compilation errors, missing headers, etc.
+    ```
+  </Accordion>
+  
+  <Accordion title="Dynamic Dependency Unsolvable">
+    **Error:**
+    ```
+    ERROR: Unable to resolve dynamic dependency: pkgconfig(libfoo)
+    ERROR: No package provides this after all packages built
+    ```
+    
+    **Causes:**
+    - No package actually provides the required implicit provide
+    - Package providing it failed to build
+    - Typo in the dependency name
+    
+    **Solutions:**
+    1. Find which package should provide it: `rpm -q --whatprovides 'pkgconfig(libfoo)'`
+    2. Check if that package is in the build list
+    3. Verify the providing package built successfully
+    4. Check for typos in the `Requires` line
+    
+    See [Package Building Process](./package-building#dynamic-dependencies) for details on dynamic dependencies.
+  </Accordion>
+  
+  <Accordion title="Chroot Mount Failure">
+    **Error:**
+    ```
+    ERROR: Failed to unmount chroot directory
+    ERROR: Device or resource busy
+    ```
+    
+    **Causes:**
+    - Processes still running in chroot
+    - Mount points still active
+    - System resources not released
+    
+    **Solutions:**
+    1. Wait a few seconds and try again
+    2. Check for hung processes: `lsof +D /path/to/chroot`
+    3. Manually unmount: `sudo umount -l /path/to/chroot/{dev,proc,sys}`
+    4. If persists, **reboot the host machine**
+    
+    <Warning>
+    Never manually delete chroot directories with active mounts. Always unmount first to avoid host system issues.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="Disk Space Issues">
+    **Error:**
+    ```
+    ERROR: No space left on device
+    ERROR: Failed to create image
+    ```
+    
+    **Causes:**
+    - Build directory out of space
+    - Output directory out of space
+    - Temporary space exhausted
+    
+    **Solutions:**
+    1. Check disk usage: `df -h`
+    2. Clean old builds: `make clean`
+    3. Clean package cache: `rm -rf ./../out/RPMS/cache`
+    4. Increase disk space for build partition
+    5. Change output location: `OUT_DIR=/path/with/more/space make image`
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Strategies
+
+<Steps>
+  <Step title="Identify the Stage">
+    Determine which build stage failed (toolchain, packages, images)
+  </Step>
+  
+  <Step title="Locate the Log">
+    Find the relevant log file in `./../build/logs/`
+  </Step>
+  
+  <Step title="Read the Error">
+    Look at the last 50-100 lines of the log (errors are usually at the end)
+  </Step>
+  
+  <Step title="Understand the Context">
+    Read backwards from the error to understand what was being attempted
+  </Step>
+  
+  <Step title="Search for Solutions">
+    Check this page, the documentation, or search for similar errors
+  </Step>
+  
+  <Step title="Try Manual Reproduction">
+    For package build failures, try building manually in a chroot to get more details
+  </Step>
+</Steps>
+
+### Useful Commands
+
+```bash
+# View last 50 lines of most recent log
+tail -50 ./../build/logs/pkggen/rpmbuilding/*.log
+
+# Search all logs for a specific error
+grep -r "error text" ./../build/logs/
+
+# View full dependency graph
+less ./../build/pkg_artifacts/graph.dot
+
+# Find what provides a package
+tdnf whatprovides "pkgconfig(libfoo)"
+
+# Check package build status
+ls -lh ./../out/RPMS/x86_64/ | grep package-name
+```
+
+## Getting Help
+
+If you're stuck:
+
+1. **Check Documentation**: Review the [architecture overview](./build-system) and related pages
+2. **Search Issues**: Look for similar problems in the GitHub issues
+3. **Ask the Community**: Open a GitHub issue with:
+   - Error message
+   - Relevant log excerpts
+   - Steps to reproduce
+   - Build environment details
+
+<Card title="Azure Linux GitHub" icon="github" href="https://github.com/microsoft/azurelinux">
+  Report issues and get help from the community
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build System Overview" icon="arrow-left" href="./build-system">
+    Return to the architecture overview
+  </Card>
+  <Card title="Package Building" icon="diagram-project" href="./package-building">
+    Deep dive into dependency graphs and build orchestration
+  </Card>
+</CardGroup>

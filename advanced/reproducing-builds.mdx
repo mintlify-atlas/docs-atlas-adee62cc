@@ -1,0 +1,213 @@
+---
+title: Reproducing Builds
+description: How to reproduce Azure Linux builds using summary files
+---
+
+## Overview
+
+By default, the Azure Linux build system pulls the highest available version of external packages. However, you may need to reproduce a build using the exact same external package versions, even if newer versions are available.
+
+The build system supports reproducible builds through summary files - JSON representations of packages consumed during a build.
+
+## Build Summaries
+
+Summary files are automatically generated during each build and contain information about package versions used.
+
+### Summary File Types
+
+| Build Type | Summary File Location | Description |
+|------------|----------------------|-------------|
+| Package Build | `$(PKGBUILD_DIR)/graph_external_deps.json` | Contains **only external** packages required to build local packages |
+| Image Build | `$(IMAGEGEN_DIR)/{imagename}/image_deps.json` | Contains **all packages** (both external and local) required to build the image |
+| Initrd Build | `$(IMAGEGEN_DIR)/iso_initrd/image_deps.json` | Contains **all packages** required to build the initrd (typically all external unless modified) |
+
+### Saving Summary Files
+
+Summary files are regenerated every build. To reproduce a build later, save the summary files to another location:
+
+```bash
+# After a successful build, save the summary files
+cp build/pkg_artifacts/graph_external_deps.json ~/saved-summaries/
+cp out/images/core-efi/image_deps.json ~/saved-summaries/
+```
+
+<Warning>
+The `graph_external_deps.json` contains **ALL** external packages required to build your local spec files. If you depend on external packages outside the core Azure Linux PMC repository, ensure you still have access to them when reproducing builds.
+</Warning>
+
+## Build Constraints
+
+To successfully reproduce a build, you must meet four constraints:
+
+### 1. Identical Local SPEC Files
+
+The local SPEC files must be exactly the same as when the summary files were generated. Any modifications to SPEC files will prevent accurate reproduction.
+
+### 2. Same Build Target
+
+The build target must match. If summary files were generated from an image build, the reproduced build must build the exact same image configuration.
+
+### 3. Matching Toolkit Version
+
+Use the same toolkit version. Summary files generated with a `3.0` toolkit must be used with the `3.0` toolkit.
+
+### 4. Clean Build State
+
+Both the original and reproduced builds must start from a clean state:
+
+```bash
+sudo make clean
+```
+
+**Exception**: If using external packages not in the PMC repository, pre-populate the local cache after cleaning but before building.
+
+## Reproducing Builds
+
+### Reproducing a Package Build
+
+To reproduce a package build, use the same make invocation with the `PACKAGE_CACHE_SUMMARY` variable:
+
+```bash
+sudo make build-packages \
+  PACKAGE_CACHE_SUMMARY=~/saved-summaries/graph_external_deps.json \
+  -j$(nproc) \
+  REBUILD_TOOLS=y
+```
+
+### Reproducing an Image Build
+
+To reproduce an image build, provide both package and image summary files:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  PACKAGE_CACHE_SUMMARY=~/saved-summaries/graph_external_deps.json \
+  IMAGE_CACHE_SUMMARY=~/saved-summaries/image_deps.json \
+  REBUILD_TOOLS=y
+```
+
+### Reproducing an ISO Build
+
+To reproduce an ISO build, provide all three summary files:
+
+```bash
+sudo make iso \
+  CONFIG_FILE=./imageconfigs/full.json \
+  PACKAGE_CACHE_SUMMARY=~/saved-summaries/graph_external_deps.json \
+  IMAGE_CACHE_SUMMARY=~/saved-summaries/image_deps.json \
+  INITRD_CACHE_SUMMARY=~/saved-summaries/iso_initrd_deps.json \
+  REBUILD_TOOLS=y
+```
+
+## Complete Reproduction Workflow
+
+Here's a complete example of saving and reproducing a build:
+
+### Step 1: Original Build
+
+```bash
+# Clean environment
+cd azurelinux/toolkit
+sudo make clean
+
+# Build the image
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  REBUILD_TOOLS=y \
+  -j$(nproc)
+```
+
+### Step 2: Save Summary Files
+
+```bash
+# Create a directory for this build's summaries
+mkdir -p ~/build-snapshots/2026-02-20
+
+# Save package build summary
+cp build/pkg_artifacts/graph_external_deps.json \
+  ~/build-snapshots/2026-02-20/
+
+# Save image build summary
+cp out/images/core-efi/image_deps.json \
+  ~/build-snapshots/2026-02-20/
+```
+
+### Step 3: Reproduce Later
+
+```bash
+# Clean environment
+cd azurelinux/toolkit
+sudo make clean
+
+# Reproduce the exact build
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  PACKAGE_CACHE_SUMMARY=~/build-snapshots/2026-02-20/graph_external_deps.json \
+  IMAGE_CACHE_SUMMARY=~/build-snapshots/2026-02-20/image_deps.json \
+  REBUILD_TOOLS=y \
+  -j$(nproc)
+```
+
+## Build Variables
+
+### Summary File Variables
+
+| Variable | Description |
+|----------|-------------|
+| `PACKAGE_CACHE_SUMMARY` | Path to package build summary file (`graph_external_deps.json`) |
+| `IMAGE_CACHE_SUMMARY` | Path to image build summary file (`image_deps.json`) |
+| `INITRD_CACHE_SUMMARY` | Path to initrd build summary file (for ISO builds) |
+
+## Troubleshooting
+
+### Build Fails to Reproduce
+
+Verify all constraints are met:
+
+```bash
+# Check git status for uncommitted changes
+git status
+
+# Verify you're on the correct branch/tag
+git log -1
+
+# Ensure clean build state
+sudo make clean
+```
+
+### External Packages Not Available
+
+If you depend on external packages:
+
+1. Verify repository access
+2. Check package availability in external repos
+3. Consider archiving external packages locally
+
+### Version Mismatch Errors
+
+Ensure the toolkit version matches:
+
+```bash
+# Check current branch
+git branch
+
+# Verify it matches the original build's branch
+git checkout 3.0-stable
+```
+
+## Best Practices
+
+1. **Save Summaries After Successful Builds**: Always archive summary files after important builds.
+
+2. **Tag Build Snapshots**: Use meaningful names for summary directories:
+   ```bash
+   mkdir ~/build-snapshots/$(date +%Y-%m-%d)-production-release
+   ```
+
+3. **Version Control Summary Files**: Store summary files in version control alongside release tags.
+
+4. **Document External Dependencies**: Keep records of any external packages not in PMC repositories.
+
+5. **Test Reproduction**: Periodically test that your saved summaries can reproduce builds.
+
+6. **Archive External Packages**: If using non-PMC packages, archive them with your summaries.

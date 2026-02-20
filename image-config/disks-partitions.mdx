@@ -1,0 +1,333 @@
+---
+title: "Disk and Partition Configuration"
+description: "Configure disks, partitions, and artifacts for Azure Linux images"
+---
+
+The `Disks` section of the image configuration defines the physical disk layout, partition structure, and output artifacts for your Azure Linux image.
+
+## Disk Configuration
+
+Each disk entry defines a complete disk layout:
+
+<ParamField path="PartitionTableType" type="string" required>
+  Partition table type: `gpt` or `mbr`
+</ParamField>
+
+<ParamField path="MaxSize" type="number" required>
+  Maximum disk size in megabytes (for virtual disks)
+</ParamField>
+
+<ParamField path="Artifacts" type="array">
+  Array of artifact definitions specifying output image format
+</ParamField>
+
+<ParamField path="Partitions" type="array">
+  Array of partition definitions. Omit for rootfs-only images
+</ParamField>
+
+<ParamField path="TargetDisk" type="object">
+  Required for unattended ISO installer. Defines physical disk for installation
+</ParamField>
+
+### Example Disk Configuration
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [...]
+        }
+    ]
+}
+```
+
+## Artifacts
+
+Artifacts define the output image format and compression:
+
+<ParamField path="Name" type="string" required>
+  Base name for the output artifact
+</ParamField>
+
+<ParamField path="Type" type="string">
+  Image type: `vhd`, `vhdx`, `iso`, `qcow2`, etc. Default: raw disk image
+</ParamField>
+
+<ParamField path="Compression" type="string">
+  Compression format: `tar.gz`, `gz`, `xz`, etc.
+</ParamField>
+
+### VHDX Disk Image
+
+```json
+"Artifacts": [
+    {
+        "Name": "otherName",
+        "Type": "vhdx"
+    }
+]
+```
+
+### Compressed Rootfs
+
+```json
+"Artifacts": [
+    {
+        "Name": "core",
+        "Compression": "tar.gz"
+    }
+]
+```
+
+<Note>
+Rootfs artifacts (with compression like `tar.gz`) do not support partitions.
+</Note>
+
+## Partition Configuration
+
+Partitions define the layout of each disk:
+
+<ParamField path="ID" type="string" required>
+  Unique identifier for the partition
+</ParamField>
+
+<ParamField path="Name" type="string">
+  Partition label. Required when using `partlabel` mount identifier
+</ParamField>
+
+<ParamField path="Start" type="number" required>
+  Start offset in megabytes from beginning of disk
+</ParamField>
+
+<ParamField path="End" type="number" required>
+  End offset in megabytes. Set to `0` to use remaining space
+</ParamField>
+
+<ParamField path="FsType" type="string" required>
+  Filesystem type: `fat32`, `fat16`, `vfat`, `ext2`, `ext3`, `ext4`, `xfs`, `linux-swap`
+</ParamField>
+
+<ParamField path="Flags" type="array">
+  Special partition flags for boot handling
+</ParamField>
+
+<ParamField path="Type" type="string">
+  Partition type using friendly name (alternative to TypeUUID)
+</ParamField>
+
+<ParamField path="TypeUUID" type="string">
+  Partition type UUID (alternative to Type)
+</ParamField>
+
+### EFI Boot + Root Partition
+
+```json
+"Partitions": [
+    {
+        "ID": "boot",
+        "Flags": ["esp", "boot"],
+        "Start": 1,
+        "End": 9,
+        "FsType": "fat32"
+    },
+    {
+        "ID": "rootfs",
+        "Start": 9,
+        "End": 0,
+        "FsType": "ext4",
+        "Type": "linux-root-amd64"
+    }
+]
+```
+
+### Legacy GRUB Boot + Root Partition
+
+```json
+"Partitions": [
+    {
+        "ID": "boot",
+        "Flags": ["grub"],
+        "Start": 1,
+        "End": 9,
+        "FsType": "fat32"
+    },
+    {
+        "ID": "rootfs",
+        "Start": 9,
+        "End": 0,
+        "FsType": "ext4"
+    }
+]
+```
+
+### Three-Partition Layout (EFI + Boot + Root)
+
+```json
+"Partitions": [
+    {
+        "ID": "efi",
+        "Flags": ["esp", "boot"],
+        "Start": 1,
+        "End": 65,
+        "FsType": "fat32"
+    },
+    {
+        "ID": "boot",
+        "Start": 65,
+        "End": 565,
+        "FsType": "ext4"
+    },
+    {
+        "ID": "rootfs",
+        "Name": "rootfs",
+        "Start": 565,
+        "End": 0,
+        "FsType": "ext4"
+    }
+]
+```
+
+## Partition Flags
+
+Special flags control boot and partition handling:
+
+<ResponseField name="esp" type="flag">
+  UEFI ESP (EFI System Partition)
+</ResponseField>
+
+<ResponseField name="boot" type="flag">
+  Boot partition
+</ResponseField>
+
+<ResponseField name="grub" type="flag">
+  GRUB boot partition
+</ResponseField>
+
+<ResponseField name="bios_grub" type="flag">
+  BIOS GRUB boot partition
+</ResponseField>
+
+<ResponseField name="dmroot" type="flag">
+  Device mapper root device (for encryption)
+</ResponseField>
+
+## Partition Types
+
+Friendly names for partition types (alternative to TypeUUID):
+
+| Type | UUID | Description |
+|------|------|-------------|
+| `linux` | `0fc63daf-8483-4772-8e79-3d69d8477de4` | Generic Linux filesystem |
+| `esp` | `c12a7328-f81f-11d2-ba4b-00a0c93ec93b` | EFI System Partition |
+| `xbootldr` | `bc13c2ff-59e6-4262-a352-b275fd6f7172` | Extended boot loader |
+| `linux-root-amd64` | `4f68bce3-e8cd-4db1-96e7-fbcaf984b709` | Linux root (x86-64) |
+| `linux-swap` | `0657fd6d-a4ab-43c4-84e5-0933c84b4f4f` | Linux swap |
+| `linux-home` | `933ac7e1-2eb4-4f13-b844-0e14e2aef915` | Linux home |
+| `linux-srv` | `3b8f8425-20e0-4f3b-907f-1a25a76f98e8` | Linux /srv |
+| `linux-var` | `4d21b016-b534-45c2-a9fb-5c16e091fd2d` | Linux /var |
+| `linux-tmp` | `7ec6f557-3bc5-4aca-b293-16ef5df639d1` | Linux /tmp |
+| `linux-lvm` | `e6d6d379-f507-44c2-a23c-238f2a3df928` | Linux LVM |
+| `linux-raid` | `a19d880f-05fc-4d3b-a006-743f0f84911e` | Linux RAID |
+| `linux-luks` | `ca7d7ccb-63ed-4c53-861c-1742536059cc` | Linux LUKS |
+| `linux-dm-crypt` | `7ffec5c9-2d00-49b7-8941-3ea10a5586b7` | Linux dm-crypt |
+
+### Using Partition Types
+
+```json
+{
+    "ID": "rootfs",
+    "Start": 9,
+    "End": 0,
+    "FsType": "ext4",
+    "Type": "linux-root-amd64"
+}
+```
+
+## Target Disk (ISO Installer)
+
+Required for unattended ISO installers to specify installation target:
+
+```json
+{
+    "TargetDisk": {
+        "Type": "path",
+        "Value": "/dev/sda"
+    }
+}
+```
+
+## Common Configurations
+
+### Virtual Machine (VHDX)
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ]
+}
+```
+
+### Container Rootfs
+
+```json
+{
+    "Disks": [
+        {
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Compression": "tar.gz"
+                }
+            ]
+        }
+    ]
+}
+```
+
+<Note>
+Container rootfs images do not include partitions.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="System Configuration" href="./system-config" icon="gear">
+    Configure partition mounting and system settings
+  </Card>
+  <Card title="Examples" href="./examples" icon="code">
+    View complete configuration examples
+  </Card>
+</CardGroup>

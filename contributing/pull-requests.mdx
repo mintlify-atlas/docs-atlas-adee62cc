@@ -1,0 +1,225 @@
+---
+title: Pull Request Process
+description: Learn how to submit pull requests to Azure Linux including branch structure, PR titles, and checklist requirements
+---
+
+## Branch Structure
+
+Please direct pull requests to the desired development branch. Development changes to `3.0` should target `3.0-dev`. Development changes to `2.0` should target `main`. `1.0` is deprecated and should not be used.
+
+### Azure Linux 3.0 Branches
+
+| Git Ref | Branch / Tag | For PRs | Published | Notes |
+|:--------|:-------------|:--------|:----------|:------|
+| 3.0-dev | Branch | Yes | No | **Primary development branch** |
+| 3.0 | Branch | No | Yes - eventually | Staging branch for publishing |
+| 3.0-preview | Tag | No | No | Publishing in progress |
+| 3.0-stable | Tag | No | Yes | Last published release |
+
+### Azure Linux 2.0 Branches
+
+| Git Ref | Branch / Tag | For PRs | Published | Notes |
+|:--------|:-------------|:--------|:----------|:------|
+| main | Branch | Yes | No | **Primary development branch** |
+| 2.0 | Branch | No | Yes - eventually | Staging branch for publishing |
+| 2.0-preview | Tag | No | No | Publishing in progress |
+| 2.0-stable | Tag | No | Yes | Last published release |
+
+## PR Title Guidelines
+
+PR titles should start with an action verb and clearly describe the change.
+
+### Good PR Title Examples
+
+```
+Add <package>
+Bump Release version for October Update
+Change whatever you changed
+Fix <thing you fixed> <reason you fixed it>
+Patch <package> to fix CVE-XXXX-YYYY, CVE-XXXX-YYYY…
+Upgrade <package> to version vvvv to fix CVE-XXXX-YYYY…
+Remove <package> <reason you removed it>
+```
+
+### Bad PR Title Examples
+
+Avoid titles such as:
+
+```
+package: <whatever you did to the package>
+CVE-XXXX-YYYY (leaving off what package was patched or upgraded)
+[2.0] (prefixing with branch or other information)
+```
+
+## Pull Request Process
+
+<Steps>
+
+<Step title="Prepare Your Changes">
+Make your changes in a feature branch based on the appropriate development branch (`3.0-dev` or `main`).
+</Step>
+
+<Step title="Verify Your Changes Build">
+Ensure any updated packages successfully build. For guidance on building packages, see the [building instructions](/building/overview).
+
+Ensure the package is located in the appropriate folder (`SPECS` or `SPECS-EXTENDED`).
+</Step>
+
+<Step title="Run Package Tests">
+Package tests (`%check` section) should be verified with `RUN_CHECK=y` for existing SPEC files, or added to new SPEC files.
+
+When running the check section, results will not fail a build. Check the logs for the results of this section.
+</Step>
+
+<Step title="Update Required Files">
+Ensure the following files are updated as needed:
+
+**cgmanifest files** - Up-to-date and alphabetically sorted:
+- `./cgmanifest.json`
+- `./toolkit/tools/cgmanifest.json`
+- `./toolkit/scripts/toolchain/cgmanifest.json`
+- `.github/workflows/cgmanifest.json`
+
+To validate, run in an Azure Linux container or Ubuntu >= 22.04:
+
+```bash
+.github/workflows/validate-cg-manifest.sh SPECS/<package name>/<package-name>.spec
+```
+
+**LICENSE-MAP files** - Up-to-date:
+- `./LICENSES-AND-NOTICES/SPECS/data/licenses.json`
+- `./LICENSES-AND-NOTICES/SPECS/LICENSES-MAP.md`
+
+Check by running:
+
+```bash
+python3 ./toolkit/scripts/license_map.py \
+./LICENSES-AND-NOTICES/SPECS/data/licenses.json \
+./LICENSES-AND-NOTICES/SPECS/LICENSES-MAP.md \
+./SPECS \
+./SPECS-EXTENDED \
+./SPECS-SIGNED
+```
+
+**Source file hashes** - All source files have up-to-date hashes in the `*.signatures.json` files:
+
+```bash
+cd toolkit
+sudo make input-srpms REBUILD_TOOLS=y SRPM_FILE_SIGNATURE_HANDLING=update
+```
+</Step>
+
+<Step title="Verify Toolchain Changes (If Applicable)">
+If you changed any packages in the [toolchain package manifests](https://github.com/microsoft/azurelinux/tree/main/toolkit/resources/manifests/package), ensure:
+
+1. The toolchain has been rebuilt successfully
+2. The toolchain/worker package manifests are up-to-date (versions match latest package versions in SPEC files):
+   - `toolchain_x86_64.txt`
+   - `toolchain_aarch64.txt`
+   - `pkggen_core_x86_64.txt`
+   - `pkggen_core_aarch64.txt`
+</Step>
+
+<Step title="Update Static Dependencies">
+Packages depending on static components modified in this PR (Golang, `*-static` subpackages, etc.) should have their `Release` tag incremented.
+
+Dependent packages are packages which contain a `BuildRequires` on the package you are updating and create static links from your package. This can be difficult to discern based on spec files alone and may require investigating `make` commands in dependent packages or consulting an Azure Linux dev.
+</Step>
+
+<Step title="Verify Package Sources">
+All package sources must be available. The sources are either in the source server or local `SPECS` folder (`SPECS/<package>/SOURCES` or `SPECS/<package>`).
+
+While it is possible to build packages with all sources inside the repo, our policy is generally to have the source compressed and placed on the source server. Uploading to the source server can only be accomplished by an Azure Linux developer. Please request help in your PR for uploading your sources to the source server.
+
+To check the source server: [https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/< source tar >]
+</Step>
+
+<Step title="Test Go Tools (If Modified)">
+If you modified the Go tools, ensure that the formatting meets Go standards and that the tests still pass:
+
+```bash
+cd toolkit
+# fix formatting
+sudo make go-tidy-all
+# check tests
+sudo make go-test-coverage
+```
+</Step>
+
+<Step title="Update Documentation">
+Documentation should be updated to match any changes to the build system. See [toolkit/docs](https://github.com/microsoft/azurelinux/tree/main/toolkit/docs).
+</Step>
+
+<Step title="Create Pull Request">
+Create your pull request with:
+
+1. A clear title following the [PR title guidelines](#pr-title-guidelines)
+2. A summary of what the PR accomplishes and why it was needed
+3. A detailed change log listing all changes
+4. Links to any associated issues or CVEs
+5. Test methodology (e.g., local build, pipeline build id)
+</Step>
+
+<Step title="Complete PR Checklist">
+Check all applicable items in the merge checklist when creating your PR. See the [PR Checklist](#pr-checklist) below for details.
+</Step>
+
+<Step title="Respond to Review Feedback">
+Address any feedback from reviewers and update your PR as needed.
+</Step>
+
+<Step title="Merge">
+Once all checks pass and reviewers approve, your PR will be merged by a maintainer.
+</Step>
+
+</Steps>
+
+## PR Checklist
+
+When creating your PR, ensure the following items are checked (tick any boxes which don't apply to this PR):
+
+- [ ] The toolchain has been rebuilt successfully (or no changes were made to it)
+- [ ] The toolchain/worker package manifests are up-to-date
+- [ ] Any updated packages successfully build (or no packages were changed)
+- [ ] Packages depending on static components modified in this PR (Golang, `*-static` subpackages, etc.) have had their `Release` tag incremented
+- [ ] Package tests (%check section) have been verified with RUN_CHECK=y for existing SPEC files, or added to new SPEC files
+- [ ] All package sources are available
+- [ ] cgmanifest files are up-to-date and sorted
+- [ ] LICENSE-MAP files are up-to-date
+- [ ] All source files have up-to-date hashes in the `*.signatures.json` files
+- [ ] `sudo make go-tidy-all` and `sudo make go-test-coverage` pass
+- [ ] Documentation has been updated to match any changes to the build system
+- [ ] Ready to merge
+
+## PR Template Sections
+
+Your pull request should include the following sections:
+
+### Summary (Required)
+
+Quick explanation of the changes. What does the PR accomplish, why was it needed?
+
+### Change Log (Required)
+
+Detail the changes made here:
+- List any packages which will be affected by this change, if applicable
+- List any CVEs fixed by this change, if applicable
+
+### Does This Affect the Toolchain? (Required)
+
+Any packages which are included in the toolchain should be carefully considered. Make sure the toolchain builds with these changes if so.
+
+Answer: **YES/NO**
+
+### Associated Issues (Optional)
+
+Link to GitHub issues if possible. You can use "fixes #xxxx" to auto close an associated issue once the PR is merged.
+
+### Links to CVEs (Optional)
+
+Provide links to any CVEs addressed by this PR:
+- https://nvd.nist.gov/vuln/detail/CVE-YYYY-XXXX
+
+### Test Methodology
+
+How was this validated? (e.g., local build, pipeline build id)

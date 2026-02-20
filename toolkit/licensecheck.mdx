@@ -1,0 +1,261 @@
+---
+title: "License Check"
+description: "Tool for validating license files in RPM packages"
+---
+
+License Check validates that RPM packages correctly declare and include their license files according to packaging best practices.
+
+## Overview
+
+License Check scans directories containing RPM packages and validates:
+
+- Proper use of `%license` directives
+- License files not incorrectly marked as `%doc` files
+- License files placed in `/usr/share/licenses/`
+- Detection of duplicated license files
+- Compliance with license naming conventions
+
+## Usage
+
+```bash
+licensecheck [flags]
+```
+
+## Parameters
+
+### Required Parameters
+
+<ParamField path="--rpm-dirs" type="string[]" required>
+  Directories to recursively scan for RPM files to validate. Multiple directories can be specified.
+</ParamField>
+
+<ParamField path="--name-file" type="string" required>
+  Path to a file containing license names to check for. This file defines valid license identifiers.
+</ParamField>
+
+<ParamField path="--build-dir" type="string" required>
+  Directory to store temporary files during validation.
+</ParamField>
+
+<ParamField path="--dist-tag" type="string" required>
+  The distribution tag for the packages being validated (e.g., `azl3`).
+</ParamField>
+
+<ParamField path="--worker-tar" type="string" required>
+  Full path to `worker_chroot.tar.gz` file used to create a clean validation environment.
+</ParamField>
+
+### Optional Parameters
+
+<ParamField path="--exception-file" type="string">
+  Path to a file containing license exceptions. This file can define per-package and global exceptions using regex patterns.
+</ParamField>
+
+<ParamField path="--mode" type="string" default="default">
+  Level of license validation to perform. Valid values:
+  - `none` - Skip license checking
+  - `default` - Standard validation (recommended)
+  - `pedantic` - Strict validation treating warnings as errors
+</ParamField>
+
+<ParamField path="--results-file" type="string">
+  Path to save the detailed validation results in JSON format.
+</ParamField>
+
+<ParamField path="--summary-file" type="string">
+  Path to save a human-readable summary of the validation results.
+</ParamField>
+
+### Logging Options
+
+<ParamField path="--log-file" type="string">
+  Path to file for log output.
+</ParamField>
+
+<ParamField path="--log-level" type="string" default="info">
+  Log level: panic, fatal, error, warn, info, debug, trace.
+</ParamField>
+
+## Validation Modes
+
+### Default Mode
+
+The default mode performs standard validation and reports errors for:
+
+- License files marked as `%doc` instead of `%license`
+- Files in `/usr/share/licenses/` not marked as license files
+- Warnings for duplicated license files
+
+### Pedantic Mode
+
+Pedantic mode is stricter and treats all warnings as errors, including:
+
+- Duplicated license files (both `%license` and `%doc`)
+- All issues flagged in default mode
+
+### None Mode
+
+Skips all license validation.
+
+## Error Types
+
+License Check categorizes issues into three types:
+
+### 1. Bad %doc Files
+
+A documentation file that appears to be a license file but is marked with `%doc` instead of `%license`.
+
+**How to fix:** Mark the file using `%license` in your spec file, ideally without a buildroot path:
+
+```spec
+%license COPYING
+```
+
+### 2. Bad General Files
+
+A file placed in `/usr/share/licenses/` that is not flagged as a license file.
+
+**How to fix:** Use `%license` instead of manually placing files:
+
+```spec
+# Preferred
+%license LICENSE
+
+# Avoid
+%{_docdir}/%{name}/LICENSE
+```
+
+### 3. Duplicated License Files
+
+A license file that is both a `%license` and a `%doc` file.
+
+**How to fix:** Remove the duplicate entry. If the files are equivalent, keep only the `%license` entry.
+
+## Examples
+
+### Basic Validation
+
+Validate RPMs in a directory:
+
+```bash
+licensecheck \
+  --rpm-dirs ./build/RPMS \
+  --name-file ./resources/license-names.txt \
+  --exception-file ./resources/license-exceptions.txt \
+  --build-dir ./build/license-check \
+  --dist-tag azl3 \
+  --worker-tar ./build/worker_chroot.tar.gz
+```
+
+### Multiple Directories
+
+Validate RPMs across multiple directories:
+
+```bash
+licensecheck \
+  --rpm-dirs ./build/RPMS/x86_64 \
+  --rpm-dirs ./build/RPMS/noarch \
+  --name-file ./resources/license-names.txt \
+  --build-dir ./build/license-check \
+  --dist-tag azl3 \
+  --worker-tar ./build/worker_chroot.tar.gz
+```
+
+### Save Results
+
+Generate detailed results and summary files:
+
+```bash
+licensecheck \
+  --rpm-dirs ./build/RPMS \
+  --name-file ./resources/license-names.txt \
+  --build-dir ./build/license-check \
+  --dist-tag azl3 \
+  --worker-tar ./build/worker_chroot.tar.gz \
+  --results-file ./license-results.json \
+  --summary-file ./license-summary.txt
+```
+
+### Pedantic Mode
+
+Run with strict validation:
+
+```bash
+licensecheck \
+  --rpm-dirs ./build/RPMS \
+  --name-file ./resources/license-names.txt \
+  --build-dir ./build/license-check \
+  --dist-tag azl3 \
+  --worker-tar ./build/worker_chroot.tar.gz \
+  --mode pedantic
+```
+
+## Exception Files
+
+Exception files allow you to suppress false positives using regex patterns.
+
+### Format
+
+The exception file supports per-package and global exceptions:
+
+```text
+# Global exception (applies to all packages)
+.*PATENTS.*
+
+# Package-specific exception
+package-name:.*NOTICE.*
+```
+
+### Example Exception File
+
+```text
+# Ignore PATENTS files (common false positive)
+.*PATENTS.*
+
+# Package-specific exceptions
+openssl:.*LICENSE.*
+kernel:.*COPYING.*
+
+# Documentation that looks like licenses but isn't
+.*README\.license.*
+```
+
+## Querying Package Contents
+
+You can inspect package contents using RPM commands:
+
+```bash
+# View all files in a package
+rpm -ql package.rpm
+
+# View only license files
+rpm -qL package.rpm
+
+# View only documentation files
+rpm -qd package.rpm
+```
+
+## Exit Codes
+
+License Check uses the following exit codes:
+
+- **0** - All validations passed (or only warnings in default mode)
+- **1** - One or more packages have license errors
+
+<Warning>
+  In pedantic mode, warnings are treated as errors and will cause a non-zero exit code.
+</Warning>
+
+## Best Practices
+
+1. **Use %license directive**: Always use `%license` for license files in spec files
+2. **Avoid manual paths**: Prefer `%license COPYING` over `%license %{_docdir}/%{name}/COPYING`
+3. **Review exceptions**: Regularly review and minimize exception file entries
+4. **Run in CI/CD**: Integrate license checking into your build pipeline
+5. **Keep exceptions documented**: Document why each exception exists
+
+## Related Tools
+
+- [Spec Reader](/toolkit/specreader) - Parse RPM spec files
+- [Validator](/toolkit/validator) - Validate image configurations
+- [Downloader](/toolkit/downloader) - Download files with retry logic

@@ -1,0 +1,299 @@
+---
+title: Read-Only Root Filesystem
+description: Configure read-only root filesystems with dm-verity for enhanced security in Azure Linux
+---
+
+Azure Linux supports read-only root filesystems using dm-verity, which provides integrity verification and tamper detection for the root filesystem.
+
+<Warning>
+The `ReadOnlyVerityRoot` feature in image configuration has been deprecated. This functionality is now provided through the Azure Linux Image Customizer tool.
+</Warning>
+
+## Overview
+
+A read-only root filesystem with dm-verity provides:
+
+- **Integrity Verification**: Cryptographically verify that the root filesystem hasn't been modified
+- **Tamper Detection**: Detect any unauthorized changes to the root filesystem
+- **Attack Surface Reduction**: Prevent runtime modifications to system files
+- **Compliance**: Meet security requirements for immutable infrastructure
+
+dm-verity uses a hash tree to verify each block of the filesystem. If any block is modified, the verification fails and the system prevents access to that block.
+
+## Azure Linux Image Customizer
+
+The read-only root filesystem feature is now configured using the [Azure Linux Image Customizer](https://github.com/microsoft/azurelinux-image-customizer) tool.
+
+### Installation
+
+```bash
+# Download the Image Customizer
+wget https://github.com/microsoft/azurelinux/releases/download/3.0-stable/azlinux-image-customizer
+
+# Make it executable
+chmod +x azlinux-image-customizer
+```
+
+### Configuration
+
+Configure the verity root filesystem in your image configuration file:
+
+```yaml
+# image-config.yaml
+os:
+  verity:
+    type: "read-only-root"
+    dataPartition: "/dev/sda2"
+    hashPartition: "/dev/sda3"
+```
+
+### Verity Configuration Options
+
+| Option | Description | Required |
+|--------|-------------|----------|
+| `type` | Verity type: `read-only-root` or `none` | Yes |
+| `dataPartition` | Device path for the data partition | Yes if type is not `none` |
+| `hashPartition` | Device path for the hash partition | Yes if type is not `none` |
+| `roothash` | Specific root hash value (usually auto-generated) | No |
+| `saltsize` | Size of salt in bytes (default: 32) | No |
+
+### Building with Read-Only Root
+
+```bash
+# Build image with verity configuration
+sudo ./azlinux-image-customizer \
+  --input base-image.qcow2 \
+  --output secured-image.qcow2 \
+  --config image-config.yaml
+```
+
+## How dm-verity Works
+
+### Hash Tree Structure
+
+dm-verity creates a Merkle tree hash structure:
+
+1. The filesystem is divided into blocks (typically 4KB)
+2. Each block is hashed using SHA-256
+3. Hashes are combined and hashed recursively to form a tree
+4. The root hash represents the entire filesystem
+
+```
+                    Root Hash
+                    /      \
+                   /        \
+            Hash Level 1  Hash Level 1
+           /    \         /    \
+          /      \       /      \
+    Hash L2  Hash L2  Hash L2  Hash L2
+     |        |        |        |
+   Block1  Block2  Block3  Block4  ...
+```
+
+### Verification Process
+
+When reading data:
+
+1. The kernel reads the requested block
+2. Computes the hash of the block
+3. Compares with the stored hash
+4. If hashes match, data is valid
+5. If hashes don't match, I/O error is returned
+
+<Warning>
+If dm-verity detects corruption, the system will panic by default to prevent using potentially compromised data. This is the intended security behavior.
+</Warning>
+
+## Partition Layout
+
+A verity-enabled system requires three partitions:
+
+| Partition | Type | Mount Point | Description |
+|-----------|------|-------------|-------------|
+| Boot | ext4 | `/boot` | Bootloader and kernel (read-write) |
+| Root Data | ext4 | `/` | Root filesystem data (read-only) |
+| Root Hash | raw | - | dm-verity hash tree (not mounted) |
+
+Example partition layout:
+
+```bash
+/dev/sda1  512M   ext4   /boot     (rw)
+/dev/sda2  20G    ext4   /         (ro,verity)
+/dev/sda3  512M   raw    -         (verity hash)
+```
+
+## Writable Paths
+
+Even with a read-only root, certain paths need to be writable:
+
+### Overlay Filesystems
+
+Use overlay filesystems for paths that need write access:
+
+```yaml
+# image-config.yaml
+os:
+  verity:
+    type: "read-only-root"
+  overlays:
+    - path: "/etc"
+      upperDir: "/var/lib/overlay/etc/upper"
+      workDir: "/var/lib/overlay/etc/work"
+    - path: "/var"
+      upperDir: "/var/lib/overlay/var/upper"
+      workDir: "/var/lib/overlay/var/work"
+```
+
+### Temporary Filesystems
+
+Use tmpfs for temporary writable storage:
+
+```yaml
+os:
+  additionalFiles:
+    - path: "/etc/fstab"
+      content: |
+        tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev 0 0
+        tmpfs /run tmpfs defaults,nosuid,nodev,mode=755 0 0
+        tmpfs /var/tmp tmpfs defaults,noexec,nosuid,nodev 0 0
+```
+
+## Bootloader Configuration
+
+The bootloader must be configured to use dm-verity:
+
+### GRUB Configuration
+
+Add kernel parameters for dm-verity:
+
+```bash
+# /boot/grub2/grub.cfg
+linux /vmlinuz root=/dev/mapper/root-verity ro \
+  verity.roothash=<computed-hash> \
+  verity.hashdevice=/dev/sda3 \
+  verity.datadevice=/dev/sda2
+```
+
+The Image Customizer automatically configures these parameters.
+
+## Runtime Behavior
+
+### Read Operations
+
+Normal read operations work as usual, with transparent verification:
+
+```bash
+# Reading files works normally
+cat /etc/os-release
+
+# But writes fail
+echo "test" > /etc/test-file
+# Error: Read-only file system
+```
+
+### Write Attempts
+
+Any write attempt to the read-only root will fail:
+
+```bash
+# Package updates that modify root will fail
+sudo tdnf update
+# Error: Read-only file system
+
+# System file modifications fail
+sudo rm /usr/bin/bash
+# Error: Read-only file system
+```
+
+### System Updates
+
+System updates require special handling:
+
+1. Boot into a recovery environment
+2. Update the root filesystem offline
+3. Regenerate the verity hash tree
+4. Update the bootloader with new root hash
+5. Reboot into the updated system
+
+Or use an A/B update strategy with two root partitions.
+
+## Troubleshooting
+
+### Verification Failure
+
+If dm-verity detects corruption:
+
+```
+device-mapper: verity: <device>: data block <block-number> is corrupted
+```
+
+**Causes:**
+- Disk corruption
+- Tampering
+- Hardware failure
+- Incorrect root hash
+
+**Resolution:**
+1. Boot from recovery media
+2. Check disk for errors: `fsck /dev/sda2`
+3. If tampering is suspected, restore from known-good image
+4. Regenerate hash tree if data is confirmed good
+
+### System Won't Boot
+
+If the system fails to boot with dm-verity:
+
+1. Boot with verity disabled (add `verity.disabled=1` to kernel command line)
+2. Check system logs: `journalctl -xb`
+3. Verify partition layout: `lsblk`
+4. Check hash device exists: `ls -l /dev/sda3`
+
+### Performance Issues
+
+dm-verity adds cryptographic verification overhead:
+
+- Typical overhead: 5-10% for sequential reads
+- More noticeable for random reads
+- Minimal impact on write performance (root is read-only)
+
+To optimize:
+- Use faster storage (NVMe SSDs)
+- Ensure adequate RAM for caching
+- Consider hardware crypto acceleration
+
+## Best Practices
+
+1. **Test Thoroughly**: Test read-only root in development before production
+2. **Plan Updates**: Design an update strategy before deployment
+3. **Monitor Logs**: Watch for verification failures
+4. **Backup Root Hash**: Store the root hash securely for recovery
+5. **Use with Other Security**: Combine with Secure Boot, TPM, etc.
+6. **Document Overlays**: Clearly document which paths are writable
+7. **Regular Verification**: Periodically verify system integrity
+
+## A/B Update Strategy
+
+For production systems, consider A/B partitioning:
+
+```
+/dev/sda1  512M   ext4   /boot
+/dev/sda2  20G    ext4   / (slot A)
+/dev/sda3  512M   raw    verity hash A
+/dev/sda4  20G    ext4   / (slot B)
+/dev/sda5  512M   raw    verity hash B
+```
+
+Update process:
+1. System runs from slot A
+2. Update slot B while running
+3. Generate new hash for slot B
+4. Switch boot to slot B
+5. Reboot
+6. If successful, slot A becomes the next update target
+
+## See Also
+
+- [Azure Linux Image Customizer Documentation](https://github.com/microsoft/azurelinux-image-customizer)
+- [Security Features](features)
+- [Production Build Recommendations](production-builds)
+- [dm-verity Kernel Documentation](https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html)

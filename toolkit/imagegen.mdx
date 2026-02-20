@@ -1,0 +1,158 @@
+---
+title: Imagegen (Imager)
+description: Tool to create and install Azure Linux images from configuration files
+---
+
+Imagegen (also known as Imager) is the primary tool for creating Azure Linux disk images and root filesystems. It reads an image configuration file and builds a complete bootable image or rootfs by installing packages, configuring the system, and setting up partitions and filesystems.
+
+## Usage
+
+```bash
+imager --config-file <config.json> --output-dir <output> [options]
+```
+
+## Parameters
+
+<ParamField path="config-file" type="string" required>
+  Path to the image configuration file (JSON format)
+</ParamField>
+
+<ParamField path="build-dir" type="string">
+  Directory to store temporary files while building
+</ParamField>
+
+<ParamField path="local-repo" type="string">
+  Path to local RPM repository
+</ParamField>
+
+<ParamField path="tdnf-worker" type="string">
+  Path to tdnf worker tarball
+</ParamField>
+
+<ParamField path="repo-file" type="string">
+  Full path to local.repo file
+</ParamField>
+
+<ParamField path="assets" type="string">
+  Path to assets directory containing additional files
+</ParamField>
+
+<ParamField path="base-dir" type="string">
+  Base directory for relative file paths from the config. Defaults to config's directory.
+</ParamField>
+
+<ParamField path="output-dir" type="string">
+  Path to directory to place final image
+</ParamField>
+
+<ParamField path="output-image-contents" type="string">
+  File that stores list of packages used to compose the image
+</ParamField>
+
+<ParamField path="live-install" type="boolean">
+  Enable to perform a live install to the disk specified in config file
+</ParamField>
+
+<ParamField path="emit-progress" type="boolean">
+  Write progress updates to stdout, such as percent complete and current action
+</ParamField>
+
+<ParamField path="build-number" type="string">
+  Build number to be used in the image
+</ParamField>
+
+<ParamField path="repo-snapshot-time" type="string">
+  Optional: Snapshot time to be added to the image tdnf.conf
+</ParamField>
+
+<ParamField path="timestamp-file" type="string">
+  File that stores timestamps for this program
+</ParamField>
+
+<ParamField path="log-file" type="string">
+  Path to the log file
+</ParamField>
+
+<ParamField path="log-level" type="string">
+  Log level (panic, fatal, error, warn, info, debug, trace)
+</ParamField>
+
+## How It Works
+
+1. **Load Configuration**: Parses the image configuration file
+2. **Setup Disk**: Creates and partitions the disk image (or uses existing disk for live install)
+3. **Install Packages**: Uses tdnf to install all specified packages into the image
+4. **Configure System**: Applies system settings, users, network configuration, etc.
+5. **Install Bootloader**: Installs and configures GRUB2
+6. **Finalize**: Runs post-install scripts and creates final image
+
+## Image Types
+
+### Disk Images
+Full bootable disk images with partitions, bootloader, and complete system:
+- Raw disk images
+- VHDX (Hyper-V)
+- VHD (legacy)
+- QCOW2 (QEMU/KVM)
+
+### Root Filesystem
+A root filesystem without disk partitioning or bootloader, useful for:
+- Container images
+- Installation bases
+- Custom deployment scenarios
+
+## Example
+
+### Standard Disk Image
+
+```bash
+imager \
+  --config-file imageconfigs/standard.json \
+  --build-dir build/imagegen \
+  --output-dir out/images \
+  --local-repo build/rpms \
+  --tdnf-worker toolkit/worker_chroot.tar.gz \
+  --repo-file build/local.repo \
+  --log-level info
+```
+
+### RootFS Only
+
+```bash
+imager \
+  --config-file imageconfigs/core-rootfs.json \
+  --build-dir build/imagegen \
+  --output-dir out/rootfs \
+  --local-repo build/rpms \
+  --tdnf-worker toolkit/worker_chroot.tar.gz \
+  --repo-file build/local.repo
+```
+
+### Live Install
+
+```bash
+sudo imager \
+  --config-file imageconfigs/install.json \
+  --live-install \
+  --emit-progress \
+  --log-level info
+```
+
+## Configuration File
+
+The image configuration file defines:
+- **Disks**: Partition layout, filesystem types, and sizes
+- **SystemConfigs**: Package lists, hostname, users, network settings
+- **KernelOptions**: Boot parameters
+- **AdditionalFiles**: Extra files to copy into the image
+- **PostInstallScripts**: Scripts to run after installation
+- **Scripts**: Custom scripts for advanced configuration
+
+See the [Azure Linux image configuration documentation](https://github.com/microsoft/azurelinux/tree/3.0/toolkit/docs/formats) for complete schema details.
+
+## Notes
+
+- Requires root privileges for disk operations and chroot
+- The `--emit-progress` flag is useful for CI/CD pipelines to track build progress
+- Use `--live-install` carefully - it will write directly to physical disks
+- The tool uses chroot for offline image customization, which is faster than VM-based approaches

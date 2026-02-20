@@ -1,0 +1,101 @@
+---
+title: Install from ISO
+description: Guide to installing Azure Linux from a bootable ISO image
+---
+
+The Azure Linux ISO may work in some bare-metal scenarios, but is generally intended for installation to a Virtual Machine. This guide walks you through creating a VM and installing Azure Linux from the ISO.
+
+## Download the ISO
+
+First, download the [Azure Linux 3.0 x86_64 ISO](https://aka.ms/azurelinux-3.0-x86_64.iso)
+
+## Create Virtual Machine with Hyper-V
+
+<Steps>
+  <Step title="Create New Virtual Machine">
+    From Hyper-V, select **Action → New → Virtual Machine**.
+  </Step>
+
+  <Step title="Configure VM Name">
+    Provide a name for your VM and press **Next >**.
+  </Step>
+
+  <Step title="Select Generation">
+    Select **Generation 1** (VHD) or **Generation 2** (VHDX), then press **Next >**.
+    
+    <Note>
+    Generation 2 VMs use VHDX format and support UEFI boot. Generation 1 VMs use VHD format with legacy BIOS boot.
+    </Note>
+  </Step>
+
+  <Step title="Configure Memory">
+    Change memory size if desired, then press **Next >**.
+  </Step>
+
+  <Step title="Configure Network">
+    Select a virtual switch, then press **Next >**.
+  </Step>
+
+  <Step title="Create Virtual Hard Disk">
+    1. Select **Create a virtual hard disk**
+    2. Choose a location for your VHD(X)
+    3. Set your desired disk size
+    4. Press **Next >**
+  </Step>
+
+  <Step title="Attach ISO">
+    1. Select **Install an operating system from a bootable image file**
+    2. Browse to your Azure Linux ISO
+    3. Press **Finish**
+  </Step>
+</Steps>
+
+## Configure Boot Options (Generation 2 / VHDX Only)
+
+If you selected Generation 2, you need to configure the boot options:
+
+<Steps>
+  <Step title="Open VM Settings">
+    Right-click your virtual machine from Hyper-V Manager and select **Settings...**.
+  </Step>
+
+  <Step title="Configure Security">
+    Select **Security** and under **Template:** select **Microsoft UEFI Certificate Authority**.
+  </Step>
+
+  <Step title="Configure Boot Order">
+    Select **Firmware** and adjust the boot order so DVD is first and Hard Drive is second.
+  </Step>
+
+  <Step title="Apply Changes">
+    Select **Apply** to apply all changes.
+  </Step>
+</Steps>
+
+## Install Azure Linux
+
+<Steps>
+  <Step title="Connect to VM">
+    Right-click your VM and select **Connect...**.
+  </Step>
+
+  <Step title="Start VM">
+    Select **Start** to boot the VM.
+  </Step>
+
+  <Step title="Follow Installer">
+    Follow the installer prompts to install your image.
+  </Step>
+
+  <Step title="Restart After Installation">
+    When installation completes, select restart to reboot the machine. The installation ISO will be automatically ejected.
+  </Step>
+
+  <Step title="Sign In">
+    When prompted, sign in to your Azure Linux using the username and password provisioned through the installer.
+  </Step>
+</Steps>
+
+<Note>
+The installer will guide you through partitioning, user creation, and other system configuration options.
+</Note>

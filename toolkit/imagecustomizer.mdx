@@ -1,0 +1,212 @@
+---
+title: Image Customizer
+description: Customize pre-built Azure Linux images for specific scenarios
+---
+
+The Azure Linux Image Customizer is a tool that takes an existing Azure Linux image and customizes it for a particular use case. It uses chroot and loopback devices to modify images offline without booting them, providing precise control over customizations.
+
+## Usage
+
+```bash
+imagecustomizer \
+  --image-file <base-image> \
+  --output-image-file <output-image> \
+  --config-file <config.yaml> \
+  --build-dir <build-dir> \
+  [options]
+```
+
+## Parameters
+
+<ParamField path="image-file" type="string" required>
+  Path of the base Azure Linux image which the customization will be applied to
+</ParamField>
+
+<ParamField path="output-image-file" type="string" required>
+  Path to write the customized image to
+</ParamField>
+
+<ParamField path="config-file" type="string" required>
+  Path of the image customization config file (YAML format)
+</ParamField>
+
+<ParamField path="build-dir" type="string" required>
+  Directory to run build out of
+</ParamField>
+
+<ParamField path="output-image-format" type="string">
+  Format of output image. Supported: vhd, vhd-fixed, vhdx, qcow2, raw, iso
+</ParamField>
+
+<ParamField path="output-split-partitions-format" type="string">
+  Format of partition files. Supported: raw, raw-zst
+</ParamField>
+
+<ParamField path="rpm-source" type="string">
+  Path to a RPM repo config file or a directory containing RPMs (can be specified multiple times)
+</ParamField>
+
+<ParamField path="disable-base-image-rpm-repos" type="boolean">
+  Disable the base image's RPM repos as an RPM source
+</ParamField>
+
+<ParamField path="shrink-filesystems" type="boolean">
+  Enable shrinking of filesystems to minimum size. Supports ext2, ext3, ext4 filesystem types. Requires `--output-split-partitions-format`.
+</ParamField>
+
+<ParamField path="output-pxe-artifacts-dir" type="string">
+  Create a directory with customized image PXE booting artifacts. `--output-image-format` must be set to `iso`.
+</ParamField>
+
+<ParamField path="timestamp-file" type="string">
+  File that stores timestamps for this program
+</ParamField>
+
+<ParamField path="log-file" type="string">
+  Path to the log file
+</ParamField>
+
+<ParamField path="log-level" type="string">
+  Log level (panic, fatal, error, warn, info, debug, trace)
+</ParamField>
+
+## How It Works
+
+1. **Mount Image**: Attaches the base image as a loopback device and mounts its filesystems
+2. **Apply Customizations**: Installs packages, modifies configurations, adds users, etc.
+3. **Run Scripts**: Executes custom scripts in chroot environment if specified
+4. **Create Output**: Generates the customized image in the specified format
+5. **Optional Processing**: Shrinks filesystems or creates PXE artifacts if requested
+
+## Customization Options
+
+The YAML configuration file supports:
+
+### OS Customizations
+- **Package Management**: Install, remove, or update packages
+- **Users and Groups**: Create users, set passwords, configure SSH keys
+- **Network**: Configure hostname, network interfaces, DNS
+- **Services**: Enable or disable systemd services
+- **Files**: Add or modify files
+- **Scripts**: Run custom scripts during customization
+
+### Storage Customizations
+- **Partitions**: Modify partition layout
+- **Filesystems**: Resize or modify filesystems
+- **Verity**: Configure dm-verity for read-only partitions
+
+## Example Usage
+
+### Basic Package Installation
+
+```bash
+sudo imagecustomizer \
+  --build-dir ./build \
+  --image-file azurelinux-core.vhdx \
+  --output-image-file ./custom.vhdx \
+  --output-image-format vhdx \
+  --config-file custom-config.yaml
+```
+
+**custom-config.yaml:**
+```yaml
+os:
+  packagesInstall:
+    - nginx
+    - python3
+  packagesRemove:
+    - telnet
+```
+
+### Advanced Customization
+
+```bash
+sudo imagecustomizer \
+  --build-dir ./build \
+  --image-file base.vhdx \
+  --output-image-file ./production.vhdx \
+  --output-image-format vhd-fixed \
+  --config-file production-config.yaml \
+  --rpm-source /path/to/custom/rpms
+```
+
+**production-config.yaml:**
+```yaml
+os:
+  packagesInstall:
+    - docker
+    - kubernetes-kubeadm
+  
+  hostname: k8s-node-01
+  
+  users:
+    - name: admin
+      uid: 1000
+      password:
+        type: plain-text
+        value: P@ssw0rd
+      sshPublicKeys:
+        - /path/to/id_rsa.pub
+  
+  services:
+    - name: docker
+      enabled: true
+  
+  additionalFiles:
+    /etc/myapp/config.conf:
+      source: ./configs/myapp.conf
+      permissions: "0644"
+  
+  scripts:
+    postCustomization:
+      - path: ./scripts/setup.sh
+```
+
+### ISO with PXE Artifacts
+
+```bash
+sudo imagecustomizer \
+  --build-dir ./build \
+  --image-file base.vhdx \
+  --output-image-file ./installer.iso \
+  --output-image-format iso \
+  --output-pxe-artifacts-dir ./pxe \
+  --config-file installer-config.yaml
+```
+
+### Split Partitions with Shrinking
+
+```bash
+sudo imagecustomizer \
+  --build-dir ./build \
+  --image-file base.vhdx \
+  --output-split-partitions-format raw-zst \
+  --shrink-filesystems \
+  --config-file minimal-config.yaml
+```
+
+## Advantages of Chroot Approach
+
+- **Lower Overhead**: No need to boot and shutdown the OS
+- **Precision**: Direct file system modifications without running OS side effects
+- **Fewer Requirements**: SSH and other services don't need to be pre-installed
+- **Faster**: No boot time or VM overhead
+
+## Limitations
+
+- Some tools don't work properly in chroot (e.g., systemd operations, some network tools)
+- Cannot test runtime behavior during customization
+- Limited ability to initialize complex services (e.g., Kubernetes cluster initialization)
+
+## Notes
+
+- Requires root privileges for loopback device and chroot operations
+- Either `--output-image-format` or `--output-split-partitions-format` must be specified
+- The `--shrink-filesystems` flag is useful for creating minimal images but requires `--output-split-partitions-format`
+- Use `--disable-base-image-rpm-repos` when you want to use only specific RPM sources
+- Configuration file format is YAML, unlike imagegen which uses JSON
+
+## See Also
+
+- [Image Customizer Configuration Documentation](https://github.com/microsoft/azurelinux/tree/3.0/toolkit/tools/imagecustomizer/docs)
+- [Imagegen](/toolkit/imagegen) - For building images from scratch

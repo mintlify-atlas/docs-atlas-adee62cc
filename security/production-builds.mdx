@@ -1,0 +1,287 @@
+---
+title: Production Build Recommendations
+description: Security best practices for building production Azure Linux images with GPG signature validation
+---
+
+When building Azure Linux images or ISOs for production deployment, enable explicit GPG signature verification to ensure all packages have been properly signed and verified.
+
+<Warning>
+Production images should always be built with `VALIDATE_IMAGE_GPG=y` to prevent unsigned or tampered packages from being included in the final image.
+</Warning>
+
+## Enabling GPG Validation
+
+To build images with GPG signature validation:
+
+```bash
+sudo make image VALIDATE_IMAGE_GPG=y CONFIG_FILE=<your-config>
+```
+
+This validates that all RPM packages fetched during image generation have valid GPG signatures from the expected signing keys.
+
+## Production Build Workflow
+
+A secure production workflow separates package building from image generation to ensure proper signing:
+
+### 1. Build Packages
+
+Compile packages from source:
+
+```bash
+sudo make build-packages CONFIG_FILE=<your-config>
+```
+
+This creates unsigned RPM packages in the output directory.
+
+### 2. Sign Packages
+
+Sign all built packages with your GPG key:
+
+```bash
+# Import your GPG signing key
+gpg --import /path/to/your-private-key.asc
+
+# Sign packages
+sudo make sign-packages GPG_KEY_ID=<your-key-id>
+```
+
+<Warning>
+Protect your GPG signing key. Store it securely and never commit it to version control. Use a hardware security module (HSM) for production signing keys.
+</Warning>
+
+### 3. Build Images with Validation
+
+Generate the final image with signature validation enabled:
+
+```bash
+sudo make image \
+  VALIDATE_IMAGE_GPG=y \
+  IMAGE_GPG_VALIDATION_KEYS=/path/to/your-public-key.asc \
+  CONFIG_FILE=<your-config>
+```
+
+This ensures that:
+- All packages included in the image are signed
+- Signatures are valid and match the expected keys
+- Unsigned or improperly signed packages cause the build to fail
+
+## Related Variables
+
+### Image Validation Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VALIDATE_IMAGE_GPG` | Set to `y` to require valid GPG signatures on all image packages | `n` |
+| `IMAGE_GPG_VALIDATION_KEYS` | Path(s) to GPG public key files for signature validation | Azure Linux keys |
+
+### Toolchain Validation Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VALIDATE_TOOLCHAIN_GPG` | Automatically enabled when downloading pre-built toolchain | Auto |
+| `TOOLCHAIN_GPG_VALIDATION_KEYS` | GPG key files for toolchain validation | Azure Linux keys |
+
+## Custom GPG Keys
+
+To use your own GPG keys for signing and validation:
+
+### Generate a GPG Key
+
+```bash
+# Generate a new GPG key
+gpg --full-generate-key
+
+# Select:
+# - (1) RSA and RSA
+# - 4096 bits
+# - Appropriate expiration
+# - Your name and email
+
+# Export the public key
+gpg --armor --export your-email@example.com > my-public-key.asc
+
+# Export the private key (keep secure!)
+gpg --armor --export-secret-keys your-email@example.com > my-private-key.asc
+```
+
+<Warning>
+Store private keys securely. Never share them or commit them to version control. Use strong passphrases and consider using a hardware security module (HSM) for production environments.
+</Warning>
+
+### Sign Packages with Custom Key
+
+```bash
+# Import your private key on the build system
+gpg --import my-private-key.asc
+
+# Sign individual packages
+rpm --addsign --define "_gpg_name your-email@example.com" /path/to/package.rpm
+
+# Or sign all packages in a directory
+find /path/to/packages -name "*.rpm" -exec \
+  rpm --addsign --define "_gpg_name your-email@example.com" {} \;
+```
+
+### Validate with Custom Key
+
+```bash
+# Build image with custom validation key
+sudo make image \
+  VALIDATE_IMAGE_GPG=y \
+  IMAGE_GPG_VALIDATION_KEYS=my-public-key.asc \
+  CONFIG_FILE=<your-config>
+```
+
+## Multiple Signing Keys
+
+You can specify multiple GPG keys for validation:
+
+```bash
+sudo make image \
+  VALIDATE_IMAGE_GPG=y \
+  IMAGE_GPG_VALIDATION_KEYS="key1.asc key2.asc key3.asc" \
+  CONFIG_FILE=<your-config>
+```
+
+This is useful when:
+- You have multiple signing authorities
+- You're transitioning between keys
+- You use different keys for different package sources
+
+## Verification During Build
+
+When `VALIDATE_IMAGE_GPG=y` is set, the build process will:
+
+1. Import all specified GPG public keys
+2. Check every package for a valid GPG signature
+3. Verify the signature matches one of the trusted keys
+4. Fail the build if any package is unsigned or has an invalid signature
+
+### Build Output
+
+You'll see validation messages like:
+
+```
+Validating GPG signatures for packages...
+✓ package-1.0-1.cm2.x86_64.rpm: Valid signature
+✓ package-2.0-1.cm2.x86_64.rpm: Valid signature
+✓ All packages validated successfully
+```
+
+If validation fails:
+
+```
+✗ unsigned-package-1.0-1.cm2.x86_64.rpm: No signature found
+✗ Package validation failed
+ERROR: Build aborted due to unsigned packages
+```
+
+## CI/CD Integration
+
+For automated build pipelines:
+
+```bash
+#!/bin/bash
+set -e
+
+# 1. Build packages
+echo "Building packages..."
+sudo make build-packages CONFIG_FILE=prod-config.yaml
+
+# 2. Sign packages (in secure environment)
+echo "Signing packages..."
+# Retrieve signing key from secure storage
+# Sign packages with your key
+
+# 3. Build and validate image
+echo "Building image with validation..."
+sudo make image \
+  VALIDATE_IMAGE_GPG=y \
+  IMAGE_GPG_VALIDATION_KEYS=/secure/path/to/public-key.asc \
+  CONFIG_FILE=prod-config.yaml
+
+echo "Production image build complete and validated"
+```
+
+<Warning>
+In CI/CD pipelines, never store private GPG keys in plain text. Use secure secret management systems like Azure Key Vault, HashiCorp Vault, or GitHub Secrets.
+</Warning>
+
+## Best Practices
+
+### Key Management
+
+1. **Use Strong Keys**: Minimum 4096-bit RSA keys
+2. **Set Expiration**: Keys should expire and be rotated periodically
+3. **Secure Storage**: Use HSMs or secure key management systems
+4. **Limit Access**: Only authorized personnel should access signing keys
+5. **Audit Trail**: Log all signing operations
+
+### Build Process
+
+1. **Separate Build and Sign**: Never sign on the build system
+2. **Validate Always**: Always use `VALIDATE_IMAGE_GPG=y` for production
+3. **Verify Sources**: Only use packages from trusted sources
+4. **Immutable Artifacts**: Never modify packages after signing
+5. **Reproducible Builds**: Use consistent build environments
+
+### Monitoring and Auditing
+
+1. **Log All Builds**: Keep detailed build logs
+2. **Track Signatures**: Maintain a record of what was signed when
+3. **Verify Deployments**: Check signatures on deployed systems
+4. **Regular Audits**: Periodically audit signing processes
+5. **Incident Response**: Have a plan for compromised keys
+
+## Troubleshooting
+
+### "Package has no signature" Error
+
+If builds fail with unsigned package errors:
+
+```bash
+# Check if package is signed
+rpm -qpi package.rpm | grep Signature
+
+# If not signed, sign it
+rpm --addsign --define "_gpg_name your-email@example.com" package.rpm
+
+# Verify signature
+rpm --checksig package.rpm
+```
+
+### "Signature verification failed" Error
+
+If signature verification fails:
+
+```bash
+# Check which keys are imported
+gpg --list-keys
+
+# Import the correct public key
+gpg --import correct-public-key.asc
+
+# Verify package signature manually
+rpm --import correct-public-key.asc
+rpm --checksig package.rpm
+```
+
+### Key Not Found
+
+Ensure the GPG key is in the correct format and location:
+
+```bash
+# Verify key file format
+file my-public-key.asc
+
+# Should show: "PGP public key block"
+
+# Test import
+gpg --dry-run --import my-public-key.asc
+```
+
+## See Also
+
+- [Building Azure Linux Images](/building/overview)
+- [ISO Image Verification](iso-verification)
+- [Security Features](features)

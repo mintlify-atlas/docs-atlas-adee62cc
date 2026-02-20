@@ -1,0 +1,164 @@
+---
+title: "Downloader"
+description: "Simple utility for downloading files with TLS support and retry logic"
+---
+
+The Downloader is a lightweight replacement for `wget` that provides file downloading capabilities with support for custom TLS certificates and automatic retries.
+
+## Overview
+
+Downloader simplifies the process of downloading files from URLs with built-in support for:
+
+- Custom CA certificates
+- TLS client authentication
+- Automatic retry logic
+- Directory prefix management
+- File clobbering protection
+
+## Usage
+
+```bash
+downloader [flags] <url>
+```
+
+## Parameters
+
+<ParamField path="url" type="string" required>
+  URL to download from
+</ParamField>
+
+### Output Options
+
+<ParamField path="--output-file" type="string" default="basename of URL">
+  Destination file path to download to. Can be shortened to `-O`.
+</ParamField>
+
+<ParamField path="--directory-prefix" type="string">
+  Directory prefix for the downloaded file. Can be shortened to `-P`. Cannot be used with `--output-file`.
+</ParamField>
+
+### Download Behavior
+
+<ParamField path="--no-clobber" type="boolean" default="false">
+  Do not overwrite existing files. If the file already exists, the download will be skipped.
+</ParamField>
+
+<ParamField path="--no-verbose" type="boolean" default="false">
+  Suppress verbose output and only show warnings and errors.
+</ParamField>
+
+### TLS Options
+
+<ParamField path="--ca-certificate" type="string">
+  Path to a root certificate authority file to use when downloading files.
+</ParamField>
+
+<ParamField path="--certificate" type="string">
+  Path to a TLS client certificate file to use for authentication.
+</ParamField>
+
+<ParamField path="--private-key" type="string">
+  Path to a TLS client private key file to use for authentication. Must be used with `--certificate`.
+</ParamField>
+
+### Logging Options
+
+<ParamField path="--log-file" type="string">
+  Path to file for log output.
+</ParamField>
+
+<ParamField path="--log-level" type="string" default="info">
+  Log level: panic, fatal, error, warn, info, debug, trace.
+</ParamField>
+
+## Examples
+
+### Basic Download
+
+Download a file to the current directory:
+
+```bash
+downloader https://example.com/file.tar.gz
+```
+
+The file will be saved as `file.tar.gz` in the current directory.
+
+### Download to Specific Location
+
+Download and save with a custom filename:
+
+```bash
+downloader -O /path/to/output.tar.gz https://example.com/file.tar.gz
+```
+
+### Download to Directory
+
+Download to a specific directory while keeping the original filename:
+
+```bash
+downloader -P /path/to/directory https://example.com/file.tar.gz
+```
+
+### Skip Existing Files
+
+Avoid re-downloading if the file already exists:
+
+```bash
+downloader --no-clobber -O output.tar.gz https://example.com/file.tar.gz
+```
+
+### Download with Custom CA Certificate
+
+Download from a server with a custom certificate authority:
+
+```bash
+downloader --ca-certificate /path/to/ca.crt https://example.com/file.tar.gz
+```
+
+### Download with Client Authentication
+
+Download using TLS client certificate authentication:
+
+```bash
+downloader \
+  --certificate /path/to/client.crt \
+  --private-key /path/to/client.key \
+  https://example.com/file.tar.gz
+```
+
+## Features
+
+### Automatic Retry Logic
+
+Downloader includes built-in retry logic to handle temporary network issues and ensure reliable downloads.
+
+### Query String Handling
+
+When no output filename is specified, the tool automatically strips query strings from the URL to determine the output filename:
+
+```bash
+# Downloads as "file.tar.gz" not "file.tar.gz?token=abc123"
+downloader https://example.com/file.tar.gz?token=abc123
+```
+
+### System Certificate Pool
+
+By default, Downloader uses the system certificate pool. Custom CA certificates are added to this pool rather than replacing it.
+
+## Error Handling
+
+Downloader provides clear error messages for common issues:
+
+- Invalid URLs
+- Missing or invalid certificates
+- File permission errors
+- Network connectivity problems
+
+<Note>
+  The `--output-file` and `--directory-prefix` options cannot be used together. Choose one based on your needs.
+</Note>
+
+## Related Tools
+
+- [Spec Reader](/toolkit/specreader) - Parse RPM spec files
+- [License Check](/toolkit/licensecheck) - Validate RPM license files

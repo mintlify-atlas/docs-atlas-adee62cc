@@ -1,0 +1,241 @@
+---
+title: Getting started
+description: Quick start guide to download, install, and build Azure Linux
+---
+
+This guide will help you quickly get started with Azure Linux. You can either install from a pre-built ISO or build your own images from source.
+
+<Note>
+The Azure Linux ISO may work in some bare-metal scenarios, but is generally intended for installation to a Virtual Machine.
+</Note>
+
+## Install from ISO (fastest method)
+
+The quickest way to try Azure Linux is to download and install from the pre-built ISO.
+
+<Steps>
+  <Step title="Download the ISO">
+    Download the Azure Linux 3.0 ISO for your architecture:
+    - [Azure Linux 3.0 x86_64 ISO](https://aka.ms/azurelinux-3.0-x86_64.iso)
+    - [Azure Linux 3.0 aarch64 ISO](https://aka.ms/azurelinux-3.0-aarch64.iso)
+
+    <Warning>
+    Before using a downloaded ISO, [verify the checksum and signature of the image](/security/iso-verification) for security.
+    </Warning>
+  </Step>
+  
+  <Step title="Create a virtual machine">
+    From Hyper-V on Windows:
+    
+    1. Select **Action → New → Virtual Machine**
+    2. Provide a name for your VM and press **Next**
+    3. Select **Generation 1** (VHD) or **Generation 2** (VHDX), then press **Next**
+    4. Change memory size if desired, then press **Next**
+    5. Select a virtual switch, then press **Next**
+    6. Select **Create a virtual hard disk**, choose a location for your VHD(X) and set your desired disk size, then press **Next**
+    7. Select **Install an operating system from a bootable image file** and browse to your Azure Linux ISO
+    8. Press **Finish**
+  </Step>
+  
+  <Step title="Configure boot options (Gen2/VHDX only)">
+    For Generation 2 VMs only:
+    
+    1. Right click your virtual machine from Hyper-V Manager
+    2. Select **Settings...**
+    3. Select Security and under **Template:** select **Microsoft UEFI Certificate Authority**
+    4. Select Firmware and adjust the boot order so DVD is first and Hard Drive is second
+    5. Select **Apply** to apply all changes
+  </Step>
+  
+  <Step title="Install Azure Linux">
+    1. Right click your VM and select **Connect...**
+    2. Select **Start**
+    3. Follow the installer prompts to install your image
+    4. When installation completes, select restart to reboot the machine (the installation ISO will be automatically ejected)
+    5. When prompted, sign in to your Azure Linux using the username and password provisioned through the installer
+  </Step>
+</Steps>
+
+## Build from source
+
+Build your own Azure Linux images from source with precompiled RPMs.
+
+### Prerequisites
+
+First, prepare your build environment by installing the necessary prerequisites:
+
+- **Azure Linux**: See [Azure Linux prerequisites](/building/prerequisites-mariner)
+- **Ubuntu**: See [Ubuntu prerequisites](/building/prerequisites-ubuntu)
+
+### Clone the repository
+
+From a bash terminal window, clone the Azure Linux repository and check out a stable build:
+
+```bash
+# Clone the Azure Linux repo
+git clone https://github.com/microsoft/azurelinux.git
+cd azurelinux
+
+# Sync to the latest stable build
+git checkout 3.0-stable
+```
+
+<Note>
+The `3.0-stable` tag always points to the latest known good build of Azure Linux of the 3.0 branch. A similar tag, `2.0-stable`, exists for the 2.0 branch.
+</Note>
+
+### Build a VHDX or VHD image
+
+The following builds a bootable Azure Linux image from precompiled RPMs in the Azure Linux package repository.
+
+<Tabs>
+  <Tab title="VHDX (Gen2)">
+    ```bash
+    # Switch to the toolkit folder
+    cd toolkit
+
+    # Build VHDX Image
+    # Image is placed in ../out/images/core-efi
+    sudo make image -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/core-efi.json
+    ```
+  </Tab>
+  <Tab title="VHD (Gen1)">
+    ```bash
+    # Switch to the toolkit folder
+    cd toolkit
+
+    # Build VHD Image
+    # Image is placed in ../out/images/core-legacy
+    sudo make image -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/core-legacy.json
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+No user account is provisioned by default. To sign-in to these images, you must also build the `meta-user-data.iso` configuration image.
+</Note>
+
+### Build the cloud-init configuration
+
+The cloud-init configuration file does not build by default. You will need to edit it to set a username and password or SSH Key.
+
+<Steps>
+  <Step title="Edit the user-data file">
+    Edit the file located at `./resources/assets/meta-user-data/user-data` to configure your username and password or SSH key.
+  </Step>
+  
+  <Step title="Build the configuration image">
+    ```bash
+    # Build the cloud-init configuration image
+    # The output image is ../out/images/meta-user-data.iso
+    sudo make meta-user-data
+    ```
+  </Step>
+</Steps>
+
+### Create and boot your VM
+
+<Steps>
+  <Step title="Copy images">
+    Copy your VHD(X) and meta-user-data.iso images to your VM host machine using your preferred method.
+  </Step>
+  
+  <Step title="Create virtual machine">
+    From Hyper-V:
+    
+    1. Select **Action → New → Virtual Machine**
+    2. Provide a name for your VM and press **Next**
+    3. For VHD select **Generation 1**, for VHDX select **Generation 2**, then press **Next**
+    4. Change memory size if desired, then press **Next**
+    5. Select a virtual switch, then press **Next**
+    6. Select **Use an existing virtual hard disk**, then browse and select your VHD(X) file
+    7. Press **Finish**
+  </Step>
+  
+  <Step title="Configure boot options (Gen2/VHDX only)">
+    For Generation 2 VMs only:
+    
+    1. Right click your virtual machine from Hyper-V Manager
+    2. Select **Settings...**
+    3. Select Security and under **Template:** select **Microsoft UEFI Certificate Authority**
+    4. Select the SCSI Controller from the Hardware panel
+    5. Select DVD Drive and press Add
+  </Step>
+  
+  <Step title="Mount the meta-user-data.iso">
+    1. Right click your virtual machine from Hyper-V Manager
+    2. Select **Settings...**
+    3. Select the **DVD Drive** (nested under **IDE Controller 1** for Gen1/VHD, or **SCSI Controller** for Gen2/VHDX)
+    4. Select **Image File:** and browse to the meta-user-data.iso file
+    5. Select **Apply** to apply all changes
+  </Step>
+  
+  <Step title="Boot and sign in">
+    1. Right click your VM and select **Connect...**
+    2. Select **Start**
+    3. Wait for Azure Linux to boot to the login prompt
+    4. Sign in with the username and password you provisioned in the meta-user-data.iso
+  </Step>
+</Steps>
+
+## Build an ISO image
+
+Build a bootable ISO image from precompiled RPMs:
+
+```bash
+# Switch to the toolkit folder
+cd toolkit
+
+# Build ISO image
+# Image is placed in ../out/images/full
+sudo make iso -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/full.json
+```
+
+Once built, copy your ISO image to your VM host machine and follow the [Install from ISO](#install-from-iso-fastest-method) instructions above.
+
+## Build variables explained
+
+When building Azure Linux images, these common variables control the build process:
+
+<ResponseField name="REBUILD_TOOLS" type="boolean" default="n">
+  Set to `y` to build the Go tools from source. Use `n` to use pre-compiled binaries.
+</ResponseField>
+
+<ResponseField name="REBUILD_PACKAGES" type="boolean" default="y">
+  Set to `n` to download packages from the package repository instead of building locally. This significantly speeds up builds.
+</ResponseField>
+
+<ResponseField name="CONFIG_FILE" type="string">
+  Path to the image configuration file that defines what packages to include and how to configure the image.
+</ResponseField>
+
+<ResponseField name="-j" type="number">
+  Number of parallel jobs to run. Recommend setting to the number of logical cores available on your system (e.g., `-j8` for 8 cores).
+</ResponseField>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Full build guide" icon="book" href="/building/overview">
+    Learn how to build Azure Linux end-to-end with all options
+  </Card>
+  <Card title="Customize your image" icon="palette" href="/building/customization">
+    Add packages and customize your Azure Linux image
+  </Card>
+  <Card title="Security features" icon="shield-check" href="/security/features">
+    Understand the built-in security capabilities
+  </Card>
+  <Card title="How it works" icon="wrench" href="/how-it-works/introduction">
+    Learn how the build system works under the hood
+  </Card>
+</CardGroup>
+
+## Getting help
+
+- **Bugs and features**: File [GitHub issues](https://github.com/microsoft/azurelinux/issues)
+- **Community support**: Support for the ISO is community based
+- **Documentation**: Refer to the [support documentation](https://github.com/microsoft/azurelinux/blob/3.0/SUPPORT.md)
+
+<Note>
+Looking for CBL-Mariner 2.0 source? Visit the [2.0 branch](https://github.com/microsoft/azurelinux/tree/2.0).
+</Note>

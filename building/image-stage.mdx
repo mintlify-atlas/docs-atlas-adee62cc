@@ -1,0 +1,269 @@
+---
+title: Image Build Stage
+description: Creating Azure Linux images, ISOs, and containers
+---
+
+The image stage creates bootable images, ISOs, and containers from the RPM packages built in the package stage.
+
+## Image Configuration
+
+Images are defined by two types of files:
+
+1. **Image Configuration Files** - Define image format and system configuration
+   - Located in `toolkit/imageconfigs/`
+   - Specify disk layout, output format, and which package lists to include
+
+2. **Package List Files** - Define sets of packages to install
+   - Located in `toolkit/imageconfigs/packagelists/`
+   - Each file describes a collection of related packages
+
+## Virtual Hard Disks (VHD/VHDX)
+
+### Build Legacy BIOS VHD
+
+Build a VHD image with legacy BIOS support:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-legacy.json \
+  REBUILD_TOOLS=y
+```
+
+Output: `../out/images/core-legacy/*.vhd`
+
+### Build UEFI VHDX
+
+Build a VHDX image with UEFI support:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  REBUILD_TOOLS=y
+```
+
+Output: `../out/images/core-efi/*.vhdx`
+
+<Tip>
+Use UEFI-based images (VHDX) for modern virtualization platforms and cloud environments.
+</Tip>
+
+## Container Images
+
+Build a containerized Azure Linux image:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-container.json \
+  REBUILD_TOOLS=y
+```
+
+Output: `../out/images/core-container/*.tar.gz`
+
+The resulting tarball can be imported into Docker:
+
+```bash
+docker load -i ../out/images/core-container/core-container-*.tar.gz
+```
+
+## ISO Images
+
+### Interactive ISO Installer
+
+Build a bootable ISO with interactive UI and selectable configurations:
+
+```bash
+sudo make iso \
+  CONFIG_FILE=./imageconfigs/full.json \
+  REBUILD_TOOLS=y
+```
+
+Output: `../out/images/full/*.iso`
+
+<Note>
+ISOs require additional resources stored in `toolkit/resources/imageconfigs/` including a separate initrd installer image.
+</Note>
+
+### Unattended ISO Installer
+
+Build an ISO with automated installation (no user interaction):
+
+```bash
+sudo make iso -j$(nproc) \
+  CONFIG_FILE=./imageconfigs/core-legacy-unattended-hyperv.json \
+  REBUILD_TOOLS=y \
+  UNATTENDED_INSTALLER=y
+```
+
+<Warning>
+Unattended installers require a `CONFIG_FILE` that specifies only a **single** SystemConfig. Multi-config files cannot be used with unattended installation.
+</Warning>
+
+## Build Without Rebuilding Packages
+
+Skip package rebuilding when you only want to assemble images from existing packages:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  REBUILD_TOOLS=y \
+  REBUILD_PACKAGES=n
+```
+
+This supplements missing packages from packages.microsoft.com, which can significantly accelerate the image build process.
+
+<Tip>
+Use `REBUILD_PACKAGES=n` when doing targeted package builds or testing image configurations without changing packages.
+</Tip>
+
+## Image Build Process
+
+<Steps>
+  <Step title="Fetch packages">
+    The build system fetches all packages needed for the image:
+    ```bash
+    sudo make fetch-image-packages \
+      CONFIG_FILE=./imageconfigs/core-efi.json
+    ```
+    This downloads missing packages from repositories.
+  </Step>
+
+  <Step title="Create raw disk">
+    Generate the base disk image:
+    ```bash
+    sudo make make-raw-image \
+      CONFIG_FILE=./imageconfigs/core-efi.json
+    ```
+    This creates partition tables, filesystems, and installs packages.
+  </Step>
+
+  <Step title="Convert to final format">
+    The raw disk is converted to the target format (VHD, VHDX, ISO, etc.) based on the configuration file.
+  </Step>
+</Steps>
+
+## Common Image Configurations
+
+Azure Linux provides several pre-configured images:
+
+| Configuration File | Description | Output Format |
+|-------------------|-------------|---------------|
+| `core-legacy.json` | Minimal system with BIOS support | VHD |
+| `core-efi.json` | Minimal system with UEFI support | VHDX |
+| `core-container.json` | Container base image | tar.gz |
+| `full.json` | Full ISO with installer | ISO |
+| `qemu-guest.json` | QEMU virtual machine image | VHDX |
+
+## Image Build Variables
+
+### Key Variables
+
+<ParamField path="CONFIG_FILE" type="string" required>
+  Path to image configuration file. Defines packages and image format.
+  
+  Example: `CONFIG_FILE=./imageconfigs/core-efi.json`
+</ParamField>
+
+<ParamField path="UNATTENDED_INSTALLER" type="string">
+  Create unattended ISO installer. Overrides all other installer options.
+  
+  Example: `UNATTENDED_INSTALLER=y`
+</ParamField>
+
+<ParamField path="REBUILD_PACKAGES" type="string" default="y">
+  - `y` - Build missing packages before creating image
+  - `n` - Download missing packages from repos
+</ParamField>
+
+<ParamField path="IMAGE_TAG" type="string">
+  Optional tag to append to image filename.
+  
+  Example: `IMAGE_TAG=dev-20240101`
+</ParamField>
+
+## Advanced Image Builds
+
+### Using Specific Repository Snapshot
+
+Build with packages from a specific point in time:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  REPO_SNAPSHOT_TIME="1724119509"
+```
+
+### Disable Upstream Repositories
+
+Build using only local packages:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  DISABLE_UPSTREAM_REPOS=y
+```
+
+### Using Custom Repositories
+
+Specify custom package repositories:
+
+```bash
+sudo make image \
+  CONFIG_FILE=./imageconfigs/core-efi.json \
+  REPO_LIST="./custom-repo1.repo ./custom-repo2.repo"
+```
+
+## Image Outputs
+
+All images are generated in the `out/images` folder:
+
+```
+../out/images/
+├── core-legacy/
+│   └── core-legacy-3.0.20240227.vhd
+├── core-efi/
+│   └── core-efi-3.0.20240227.vhdx
+├── core-container/
+│   └── core-container-3.0.20240227.tar.gz
+└── full/
+    └── full-3.0.20240227.iso
+```
+
+### Image Metadata
+
+Each image build generates metadata files:
+
+- `image_deps.json` - Summary of all packages included
+- `license_check_results.json` - License validation results
+- `image_pkg_manifest.json` - Complete package manifest
+
+## Testing Images
+
+### Testing VHD/VHDX in QEMU
+
+```bash
+qemu-system-x86_64 -m 4G -nographic -smp 2 -enable-kvm \
+  -bios /usr/share/ovmf/OVMF.fd \
+  -hda ../out/images/core-efi/core-efi-3.0.20240227.vhdx
+```
+
+### Testing Containers
+
+```bash
+docker load -i ../out/images/core-container/core-container-*.tar.gz
+docker run -it azurelinux:3.0 /bin/bash
+```
+
+### Testing ISOs
+
+Boot the ISO in a virtual machine or write to bootable media:
+
+```bash
+# Create bootable USB (replace /dev/sdX with your device)
+sudo dd if=../out/images/full/full-*.iso of=/dev/sdX bs=4M status=progress
+```
+
+## Next Steps
+
+- [Add a New Package](/building/add-package) to the distribution
+- Review [Build Variables Reference](/building/build-variables) for more options
+- Learn about [Reproducing Builds](/advanced/reproducing-builds)

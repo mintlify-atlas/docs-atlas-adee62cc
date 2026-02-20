@@ -1,0 +1,427 @@
+---
+title: Build Variables Reference
+description: Complete reference for Azure Linux build system variables
+---
+
+This page documents all build variables available in the Azure Linux build system. Variables are organized by category.
+
+## Target Configuration
+
+<ParamField path="CONFIG_FILE" type="string" default="">
+  Path to image configuration file to build. Defines package dependencies and final image format.
+  
+  Example: `CONFIG_FILE=./imageconfigs/core-efi.json`
+</ParamField>
+
+<ParamField path="CONFIG_BASE_DIR" type="string" default="$(dir $(CONFIG_FILE))">
+  Base directory on the build machine to search for relative file paths in the image config file.
+</ParamField>
+
+<ParamField path="PACKAGE_BUILD_LIST" type="string" default="">
+  Explicit list of packages to build. Accepts both spec and package names.
+  
+  Example: `PACKAGE_BUILD_LIST="vim nano openssh"`
+</ParamField>
+
+<ParamField path="PACKAGE_REBUILD_LIST" type="string" default="">
+  Always rebuild these packages even if up-to-date. Accepts both spec and package names.
+  
+  Example: `PACKAGE_REBUILD_LIST="kernel openssh"`
+</ParamField>
+
+<ParamField path="PACKAGE_IGNORE_LIST" type="string" default="">
+  Pretend these packages were already built successfully.
+  
+  Example: `PACKAGE_IGNORE_LIST="ncurses"`
+</ParamField>
+
+<ParamField path="SRPM_PACK_LIST" type="string" default="">
+  List of spec basenames to build into SRPMs. If empty, all specs under `SPECS_DIR` are packed. Accepts **only** spec names.
+  
+  Example: `SRPM_PACK_LIST="kernel golang openssh"`
+</ParamField>
+
+<ParamField path="TEST_RUN_LIST" type="string" default="">
+  Explicit list of packages to test. Accepts both spec and package names.
+  
+  Example: `TEST_RUN_LIST="libguestfs zlib"`
+</ParamField>
+
+<ParamField path="TEST_RERUN_LIST" type="string" default="">
+  Always test these packages even if up-to-date. Accepts both spec and package names.
+  
+  Example: `TEST_RERUN_LIST="libguestfs zlib"`
+</ParamField>
+
+<ParamField path="TEST_IGNORE_LIST" type="string" default="">
+  Ignore testing these packages. Accepts both spec and package names.
+  
+  Example: `TEST_IGNORE_LIST="acl"`
+</ParamField>
+
+## Rebuild vs Download
+
+<ParamField path="REBUILD_TOOLCHAIN" type="string" default="n">
+  Bootstrap toolchain packages locally or download them?
+  - `n` - Download pre-built toolchain from `PACKAGE_URL_LIST` or extract from `TOOLCHAIN_ARCHIVE`
+  - `y` - Bootstrap toolchain from host environment in Docker container
+</ParamField>
+
+<ParamField path="INCREMENTAL_TOOLCHAIN" type="string" default="n">
+  Perform incremental toolchain build?
+  - `n` - Full clean rebuild of final toolchain packages
+  - `y` - Reuse existing toolchain RPMs as cache
+</ParamField>
+
+<ParamField path="ALLOW_TOOLCHAIN_DOWNLOAD_FAIL" type="string" default="n">
+  Allow partial toolchain rehydration from upstream repos?
+  - `n` - Don't pull packages from `PACKAGE_URL_LIST` during incremental builds
+  - `y` - Attempt to pull toolchain RPMs to avoid rebuilding
+  
+  Only applies if `REBUILD_TOOLCHAIN=y` and `INCREMENTAL_TOOLCHAIN=y`
+</ParamField>
+
+<ParamField path="REBUILD_PACKAGES" type="string" default="y">
+  Build packages locally or download them?
+  - `y` - Parse local `*.spec` files and build packages as needed
+  - `n` - Download all packages via tdnf from internet
+</ParamField>
+
+<ParamField path="REBUILD_TOOLS" type="string" default="n">
+  Build Go tools locally or use pre-compiled binaries?
+  - `n` - Use pre-compiled go binaries from SDK
+  - `y` - Build the go tools from source
+</ParamField>
+
+<ParamField path="DOWNLOAD_SRPMS" type="string" default="n">
+  Pack SRPMs from local SPECs or download published ones?
+  - `n` - Pack SRPMs from local specs, retrieve sources from `SOURCE_URL`
+  - `y` - Download official pre-packed SRPMs from `SRPM_URL_LIST`
+</ParamField>
+
+<ParamField path="REFRESH_WORKER_CHROOT" type="string" default="y">
+  Rebuild worker chroot when manifest or packages change?
+  - `n` - Don't rebuild chroot even if modified
+  - `y` - Rebuild chroot when manifest, packages, or build script changes
+</ParamField>
+
+## Remote URLs and Repositories
+
+<ParamField path="SOURCE_URL" type="string" default="https://azurelinuxsrcstorage.blob.core.windows.net/sources/core">
+  URL to download source files when creating `*.src.rpm` files. Only one URL supported.
+</ParamField>
+
+<ParamField path="PACKAGE_URL_LIST" type="string" default="https://packages.microsoft.com/azurelinux/3.0/prod/base/$(build_arch)">
+  Space-separated list of URLs to download toolchain RPM packages from.
+  
+  Example: `PACKAGE_URL_LIST="https://custom-repo.com/rpms/x86_64"`
+</ParamField>
+
+<ParamField path="SRPM_URL_LIST" type="string" default="https://packages.microsoft.com/azurelinux/3.0/prod/base/srpms">
+  Space-separated list of URLs to download pre-packed SRPMs from.
+</ParamField>
+
+<ParamField path="REPO_LIST" type="string" default="">
+  Space-separated list of `.repo` files pointing to RPM repositories. Repos are prioritized in order.
+  
+  Example: `REPO_LIST="./custom1.repo ./custom2.repo"`
+</ParamField>
+
+<ParamField path="USE_PREVIEW_REPO" type="string" default="n">
+  Pull packages from upstream preview repository?
+  - `n` - Use only base repository
+  - `y` - Include preview repository (packages subject to change)
+</ParamField>
+
+<ParamField path="DAILY_BUILD_ID" type="string" default="">
+  Use daily build sources for given date.
+  - `""` - Disable daily build sources
+  - `lkg` - Use last known good build
+  - `V-v-YYYYMMDD` - Use specific date
+  
+  Example: `DAILY_BUILD_ID=3-0-20240227`
+</ParamField>
+
+<ParamField path="DISABLE_UPSTREAM_REPOS" type="string" default="n">
+  Only pull packages from local repositories?
+  - `n` - Pull from all repositories including external
+  - `y` - Only use local repositories (doesn't affect toolchain hydration)
+</ParamField>
+
+<ParamField path="DISABLE_DEFAULT_REPOS" type="string" default="n">
+  Disable pulling packages from PMC repositories?
+  - `n` - Pull from all repositories including PMC
+  - `y` - Only use local and `REPO_LIST` repositories
+</ParamField>
+
+<ParamField path="REPO_SNAPSHOT_TIME" type="string" default="">
+  Posix time to use as snapshot for remote repositories when fetching packages.
+  
+  Example: `REPO_SNAPSHOT_TIME="1724119509"`
+</ParamField>
+
+## Build Archives
+
+<ParamField path="TOOLCHAIN_ARCHIVE" type="string" default="">
+  Extract toolchain RPMs from this archive instead of downloading.
+  
+  Example: `TOOLCHAIN_ARCHIVE=./toolchain_rpms.tar.gz`
+</ParamField>
+
+<ParamField path="TOOLCHAIN_CONTAINER_ARCHIVE" type="string" default="">
+  Archive containing raw toolchain container for hydration.
+</ParamField>
+
+<ParamField path="PACKAGE_ARCHIVE" type="string" default="">
+  Archive to hydrate RPMs from with `make hydrate-rpms`.
+</ParamField>
+
+<ParamField path="CACHED_PACKAGES_ARCHIVE" type="string" default="">
+  Archive containing cached packages to pre-populate the build cache.
+</ParamField>
+
+## Build Behavior
+
+<ParamField path="HYDRATED_BUILD" type="string" default="n">
+  Use hydrated RPMs to satisfy dependencies?
+  - `n` - Normal build without using hydrated packages
+  - `y` - Replace RUN nodes with PreBuilt nodes for hydrated RPMs
+</ParamField>
+
+<ParamField path="DELTA_BUILD" type="string" default="n">
+  Enable fast delta builds?
+  - `n` - Normal build
+  - `y` - Pre-populate with published packages, only build new/changed packages
+</ParamField>
+
+<ParamField path="DELTA_FETCH" type="string" default="y">
+  Download pre-built packages to avoid rebuilds?
+  - `n` - Don't download pre-built packages
+  - `y` - Try to download matching pre-built packages
+</ParamField>
+
+<ParamField path="PRECACHE" type="string" default="n">
+  Pre-load cache from upstream sources?
+  - `n` - Don't pre-load cache
+  - `y` - Load cache with RPMs from upstream repos before building
+</ParamField>
+
+<ParamField path="RUN_CHECK" type="string" default="n">
+  Run package tests during build?
+  - `n` - Skip %check section
+  - `y` - Run %check section to test packages
+</ParamField>
+
+<ParamField path="USE_CCACHE" type="string" default="n">
+  Enable ccache for C/C++ compilation?
+  - `n` - Disable ccache
+  - `y` - Enable ccache to speed up recompilations
+</ParamField>
+
+## Build Performance
+
+<ParamField path="CONCURRENT_PACKAGE_BUILDS" type="string" default="0">
+  Number of packages to build in parallel. Set to 0 to use number of logical CPUs.
+  
+  Example: `CONCURRENT_PACKAGE_BUILDS=8`
+</ParamField>
+
+<ParamField path="PACKAGE_BUILD_RETRIES" type="string" default="0">
+  Number of times to retry building a failed package.
+</ParamField>
+
+<ParamField path="CHECK_BUILD_RETRIES" type="string" default="0">
+  Number of times to retry running package tests.
+</ParamField>
+
+<ParamField path="CLEANUP_PACKAGE_BUILDS" type="string" default="y">
+  Clean up intermediate build artifacts?
+  - `n` - Keep all intermediate files
+  - `y` - Clean up after successful builds
+</ParamField>
+
+<ParamField path="USE_PACKAGE_BUILD_CACHE" type="string" default="y">
+  Use package build cache?
+  - `n` - Disable build cache
+  - `y` - Enable build cache for faster rebuilds
+</ParamField>
+
+## Reproducing Builds
+
+<ParamField path="PACKAGE_CACHE_SUMMARY" type="string" default="">
+  Path to package build summary file for reproducing builds.
+  
+  Example: `PACKAGE_CACHE_SUMMARY=./graph_external_deps.json`
+</ParamField>
+
+<ParamField path="IMAGE_CACHE_SUMMARY" type="string" default="">
+  Path to image build summary file for reproducing builds.
+  
+  Example: `IMAGE_CACHE_SUMMARY=./image_deps.json`
+</ParamField>
+
+<ParamField path="INITRD_CACHE_SUMMARY" type="string" default="">
+  Path to initrd build summary file for reproducing ISO builds.
+  
+  Example: `INITRD_CACHE_SUMMARY=./iso_initrd/image_deps.json`
+</ParamField>
+
+## Authentication
+
+<ParamField path="SOURCE_AUTH_MODE" type="string" default="">
+  Authentication mode for downloading source files for SRPM packing.
+  - `anonymous` - No authentication
+  - `azurecli` - Use Azure CLI login (requires prior `az login`)
+</ParamField>
+
+<ParamField path="CA_CERT" type="string" default="">
+  Path to root CA certificate for TLS authentication.
+</ParamField>
+
+<ParamField path="TLS_CERT" type="string" default="">
+  Path to TLS client certificate for authentication.
+</ParamField>
+
+<ParamField path="TLS_KEY" type="string" default="">
+  Path to TLS client key for authentication.
+</ParamField>
+
+## GPG Validation
+
+<ParamField path="VALIDATE_TOOLCHAIN_GPG" type="string" default="y (when using upstream)">
+  Enable GPG validation of toolchain RPMs?
+  - `n` - Disable GPG validation
+  - `y` - Validate against `TOOLCHAIN_GPG_VALIDATION_KEYS`
+</ParamField>
+
+<ParamField path="VALIDATE_IMAGE_GPG" type="string" default="n">
+  Enable RPM GPG signature verification during image builds?
+  - `n` - Disable verification (for local unsigned packages)
+  - `y` - Enforce package signatures (for production builds)
+</ParamField>
+
+<ParamField path="TOOLCHAIN_GPG_VALIDATION_KEYS" type="string">
+  List of GPG key files for toolchain validation.
+</ParamField>
+
+<ParamField path="IMAGE_GPG_VALIDATION_KEYS" type="string">
+  List of GPG key files for image package validation.
+</ParamField>
+
+## Logging and Debugging
+
+<ParamField path="LOG_LEVEL" type="string" default="info">
+  Set logging level for toolkit.
+  
+  Options: `panic`, `fatal`, `error`, `warn`, `info`, `debug`, `trace`
+</ParamField>
+
+<ParamField path="LOG_COLOR" type="string" default="auto">
+  Set logging color for terminal output.
+  
+  Options: `always`, `auto`, `never`
+</ParamField>
+
+<ParamField path="STOP_ON_WARNING" type="string" default="n">
+  Stop build on warnings?
+  - `n` - Continue on warnings
+  - `y` - Stop on warnings
+</ParamField>
+
+<ParamField path="STOP_ON_PKG_FAIL" type="string" default="n">
+  Stop build on package failure?
+  - `n` - Continue building other packages
+  - `y` - Stop on first package failure
+</ParamField>
+
+<ParamField path="STOP_ON_FETCH_FAIL" type="string" default="n">
+  Stop build on package fetch failure?
+  - `n` - Continue with available packages
+  - `y` - Stop on fetch failure
+</ParamField>
+
+## Directory Customization
+
+<ParamField path="SPECS_DIR" type="string" default="$(PROJECT_ROOT)/SPECS">
+  Directory containing package SPEC files.
+</ParamField>
+
+<ParamField path="BUILD_DIR" type="string" default="$(PROJECT_ROOT)/build">
+  Directory for intermediate build artifacts.
+</ParamField>
+
+<ParamField path="OUT_DIR" type="string" default="$(PROJECT_ROOT)/out">
+  Directory for final build outputs.
+</ParamField>
+
+<ParamField path="RPMS_DIR" type="string" default="$(OUT_DIR)/RPMS">
+  Directory containing built RPM packages.
+</ParamField>
+
+<ParamField path="SRPMS_DIR" type="string" default="$(OUT_DIR)/SRPMS">
+  Directory containing source RPM packages.
+</ParamField>
+
+<ParamField path="IMAGES_DIR" type="string" default="$(OUT_DIR)/images">
+  Directory containing generated images.
+</ParamField>
+
+<ParamField path="CCACHE_DIR" type="string" default="$(PROJECT_ROOT)/ccache">
+  Directory for ccache storage.
+</ParamField>
+
+## Version Information
+
+<ParamField path="RELEASE_MAJOR_ID" type="string" default="3.0">
+  Major release version of Azure Linux.
+</ParamField>
+
+<ParamField path="BUILD_NUMBER" type="string" default="$(GIT_COMMIT_ID)">
+  Build number for the current build. Defaults to git commit ID.
+</ParamField>
+
+<ParamField path="DIST_TAG" type="string" default=".azl3">
+  Distribution tag for the "dist" macro used by specs.
+</ParamField>
+
+<ParamField path="DIST_NAME_ABRV" type="string" default="azl">
+  Abbreviation of the distribution name.
+</ParamField>
+
+<ParamField path="IMAGE_TAG" type="string" default="">
+  Optional tag to append to image filename.
+</ParamField>
+
+## Profiling and Tracing
+
+<ParamField path="ENABLE_CPU_PROFILE" type="string" default="n">
+  Enable CPU profiling for Go tools?
+</ParamField>
+
+<ParamField path="ENABLE_MEM_PROFILE" type="string" default="n">
+  Enable memory profiling for Go tools?
+</ParamField>
+
+<ParamField path="ENABLE_TRACE" type="string" default="n">
+  Enable execution tracing for Go tools?
+</ParamField>
+
+## Quick Rebuild Flags
+
+<ParamField path="QUICK_REBUILD" type="string" default="n">
+  Enable quick rebuild optimizations?
+  - `n` - Don't set quick rebuild flags
+  - `y` - Set `QUICK_REBUILD_TOOLCHAIN=y` and `QUICK_REBUILD_PACKAGES=y`
+</ParamField>
+
+<ParamField path="QUICK_REBUILD_TOOLCHAIN" type="string" default="n">
+  Enable toolchain-specific quick rebuild optimizations?
+  - `n` - Normal toolchain build
+  - `y` - Set incremental toolchain flags for faster builds
+</ParamField>
+
+<ParamField path="QUICK_REBUILD_PACKAGES" type="string" default="n">
+  Enable package-specific quick rebuild optimizations?
+  - `n` - Normal package build
+  - `y` - Set delta build flags for faster builds
+</ParamField>

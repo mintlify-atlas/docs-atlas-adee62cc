@@ -1,0 +1,131 @@
+---
+title: NVIDIA Hardware Support
+description: Configure and install NVIDIA GPU drivers on Azure Linux
+---
+
+## Overview
+
+Azure Linux provides NVIDIA driver packages through the NVIDIA RPM repository at [packages.microsoft.com](https://packages.microsoft.com/azurelinux/3.0/prod/nvidia/). This guide covers how to install and configure NVIDIA GPU support.
+
+## Licensing
+
+<Warning>
+The software in the NVIDIA RPM repository is subject to the NVIDIA end user license agreement. The use of these components is governed by the NVIDIA EULA located at [https://www.nvidia.com/content/DriverDownload-March2009/licence.php?lang=us](https://www.nvidia.com/content/DriverDownload-March2009/licence.php?lang=us).
+</Warning>
+
+Before proceeding with the installation, review and accept the NVIDIA license terms.
+
+## Installation
+
+### Register NVIDIA Repository
+
+Configure the NVIDIA RPM repository with your package manager:
+
+```bash
+# Navigate to the package manager configuration directory
+cd /etc/yum.repos.d
+
+# Download the NVIDIA repository configuration
+sudo wget https://raw.githubusercontent.com/microsoft/azurelinux/3.0/toolkit/docs/nvidia/mariner-nvidia.repo
+```
+
+### Install NVIDIA Drivers
+
+After registering the repository, install NVIDIA driver packages using tdnf:
+
+```bash
+# Update package cache
+sudo tdnf makecache
+
+# List available NVIDIA packages
+sudo tdnf search nvidia
+
+# Install NVIDIA drivers
+sudo tdnf install -y nvidia-driver
+```
+
+## Verification
+
+After installation, verify the NVIDIA driver is loaded:
+
+```bash
+# Check if NVIDIA kernel module is loaded
+lsmod | grep nvidia
+
+# Display NVIDIA driver information
+nvidia-smi
+```
+
+The `nvidia-smi` command should display information about your GPU and driver version.
+
+## CUDA Support
+
+For CUDA development and GPU computing workloads:
+
+```bash
+# Install CUDA toolkit
+sudo tdnf install -y cuda
+
+# Verify CUDA installation
+nvcc --version
+```
+
+## Configuration
+
+### Persistence Mode
+
+Enable persistence mode to keep the NVIDIA driver loaded:
+
+```bash
+sudo nvidia-smi -pm 1
+```
+
+### Automatic Loading
+
+Ensure the NVIDIA kernel module loads at boot by adding it to `/etc/modules-load.d/`:
+
+```bash
+echo "nvidia" | sudo tee /etc/modules-load.d/nvidia.conf
+```
+
+## Troubleshooting
+
+### Driver Not Loading
+
+If the driver doesn't load:
+
+1. Check kernel logs for errors:
+
+```bash
+dmesg | grep nvidia
+```
+
+2. Verify the module is available:
+
+```bash
+modinfo nvidia
+```
+
+3. Manually load the module:
+
+```bash
+sudo modprobe nvidia
+```
+
+### nvidia-smi Command Not Found
+
+Ensure the driver package is properly installed:
+
+```bash
+sudo tdnf reinstall -y nvidia-driver
+```
+
+### Conflicts with Nouveau
+
+If the open-source Nouveau driver conflicts with the NVIDIA driver, blacklist it:
+
+```bash
+echo "blacklist nouveau" | sudo tee /etc/modprobe.d/blacklist-nouveau.conf
+sudo dracut --force
+sudo reboot
+```

@@ -1,0 +1,185 @@
+---
+title: Developer Tools
+description: Tools and utilities for Azure Linux package development and debugging
+---
+
+## Overview
+
+Azure Linux provides specialized tools for package development, testing, and debugging. These tools enable developers to work efficiently with RPM packages in isolated environments.
+
+## containerized-rpmbuild
+
+The `containerized-rpmbuild` tool enables building and testing individual Azure Linux packages in an isolated containerized environment.
+
+### Features
+
+- Creates an Azure Linux container for isolated package builds
+- Mounts SPECs, INTERMEDIATE_SRPMS, and out/RPMs from the Azure Linux repository
+- Supports using locally built RPMs or upstream RPMs for dependencies
+- Uses native RPM commands for package building
+- Syncs changes to SPECS/ back to the host
+- Provides both build and test modes
+
+### Basic Usage
+
+```bash
+cd azurelinux/toolkit
+sudo make containerized-rpmbuild
+```
+
+### Available Options
+
+View all available options and usage information:
+
+```bash
+sudo make containerized-rpmbuild-help
+```
+
+### Configuration Parameters
+
+The tool accepts several optional parameters to customize behavior:
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `REPO_PATH` | Directory to use as Azure Linux repo | Current directory |
+| `MODE` | Operation mode (`build` or `test`) | `build` |
+| `VERSION` | Azure Linux version (`1.0` or `2.0`) | `2.0` |
+| `MOUNTS` | Additional directories to mount into container | None |
+| `BUILD_MOUNT` | Directory to mount as build directory | `$REPO_PATH/build` |
+| `EXTRA_PACKAGES` | Additional packages to install in container | None |
+| `ENABLE_REPO` | Use local RPMs for build dependencies | Disabled |
+| `KEEP_CONTAINER` | Keep container on exit | Disabled (cleaned up) |
+| `QUIET` | Suppress stdout for most commands | Disabled |
+
+### Build Mode
+
+Build a package using the default worker chroot filesystem:
+
+```bash
+cd azurelinux/toolkit
+sudo make containerized-rpmbuild MODE=build
+```
+
+In build mode:
+- Uses the worker chroot as the container filesystem
+- Provides a complete build environment
+- Changes to SPECS/ are preserved on the host
+- All other changes are ephemeral
+
+### Test Mode
+
+Test a package using the upstream Azure Linux container:
+
+```bash
+cd azurelinux/toolkit
+sudo make containerized-rpmbuild MODE=test
+```
+
+In test mode:
+- Uses the upstream Azure Linux container image
+- Provides a clean runtime environment
+- Suitable for testing package installation and functionality
+
+### Using Local Dependencies
+
+Enable local RPMs to satisfy build dependencies:
+
+```bash
+sudo make containerized-rpmbuild ENABLE_REPO=y
+```
+
+This mounts your local RPM repository into the container and configures tdnf to use it.
+
+### Mounting Additional Directories
+
+Mount extra directories into the container:
+
+```bash
+sudo make containerized-rpmbuild MOUNTS="/path/to/dir1 /path/to/dir2"
+```
+
+### Persistent Containers
+
+Keep the container running after exit for debugging:
+
+```bash
+sudo make containerized-rpmbuild KEEP_CONTAINER=y
+```
+
+By default, containers are automatically cleaned up on exit.
+
+## Overriding Build Definitions
+
+You can override any Azure Linux make definitions when using containerized-rpmbuild:
+
+```bash
+# Override SPECS directory
+sudo make containerized-rpmbuild SPECS_DIR=/custom/specs
+
+# Override SRPM pack list
+sudo make containerized-rpmbuild SRPM_PACK_LIST="package1 package2"
+```
+
+## Working with Packages
+
+### Building a Single Package
+
+```bash
+cd azurelinux/toolkit
+sudo make containerized-rpmbuild
+# Inside the container
+rpmbuild -ba SPECS/mypackage.spec
+```
+
+### Testing Package Installation
+
+```bash
+cd azurelinux/toolkit
+sudo make containerized-rpmbuild MODE=test
+# Inside the container
+tdnf install -y mypackage
+```
+
+### Debugging Build Issues
+
+Use persistent containers to debug:
+
+```bash
+sudo make containerized-rpmbuild KEEP_CONTAINER=y
+# Container stays running for manual inspection
+```
+
+## Best Practices
+
+1. **Use Build Mode for Development**: When actively developing spec files, use build mode to get the full toolchain.
+
+2. **Test in Clean Environment**: Use test mode to verify packages install correctly in a minimal environment.
+
+3. **Keep Containers for Debugging**: When troubleshooting build issues, use `KEEP_CONTAINER=y` to inspect the environment.
+
+4. **Mount Source Directories**: For iterative development, mount your source directories to avoid copying files.
+
+5. **Use Local Repos**: When testing with locally built dependencies, enable local repository support.
+
+## Troubleshooting
+
+### Container Creation Fails
+
+Ensure Docker is running and you have necessary permissions:
+
+```bash
+sudo systemctl status docker
+sudo usermod -aG docker $USER
+```
+
+### Build Dependencies Missing
+
+Enable local repository or check upstream repos:
+
+```bash
+sudo make containerized-rpmbuild ENABLE_REPO=y
+```
+
+### Changes Not Persisting
+
+Only changes to SPECS/ are synced to the host. Other changes are ephemeral by design.

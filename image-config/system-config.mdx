@@ -1,0 +1,541 @@
+---
+title: "System Configuration"
+description: "Configure system settings, packages, users, and customization scripts"
+---
+
+The `SystemConfigs` section defines how each system on the image is configured, including boot settings, partition mounting, packages, users, and customization scripts.
+
+## System Configuration Structure
+
+<ParamField path="Name" type="string" required>
+  Configuration name identifier
+</ParamField>
+
+<ParamField path="BootType" type="string" required>
+  Boot type: `efi` or `legacy`
+</ParamField>
+
+<ParamField path="Hostname" type="string">
+  System hostname
+</ParamField>
+
+<ParamField path="PartitionSettings" type="array" required>
+  Array of partition mounting configurations
+</ParamField>
+
+<ParamField path="PackageLists" type="array" required>
+  Array of package list file paths (relative to config file)
+</ParamField>
+
+<ParamField path="KernelOptions" type="object" required>
+  Kernel package selection (required for non-rootfs images)
+</ParamField>
+
+<ParamField path="KernelCommandLine" type="object">
+  Kernel command line parameters
+</ParamField>
+
+## Partition Settings
+
+Partition settings define how partitions are mounted:
+
+<ParamField path="ID" type="string" required>
+  Partition ID (must match partition ID in Disks section)
+</ParamField>
+
+<ParamField path="MountPoint" type="string" required>
+  Mount point path (e.g., `/`, `/boot/efi`)
+</ParamField>
+
+<ParamField path="MountOptions" type="string">
+  Mount options (e.g., `umask=0077`)
+</ParamField>
+
+<ParamField path="MountIdentifier" type="string">
+  How partition is identified in fstab: `uuid`, `partuuid`, `partlabel`. Default: `partuuid`
+</ParamField>
+
+<ParamField path="RdiffBaseImage" type="string">
+  Base image path for rdiff differential images
+</ParamField>
+
+<ParamField path="OverlayBaseImage" type="string">
+  Base image path for overlay differential images
+</ParamField>
+
+### Basic Partition Settings
+
+```json
+"PartitionSettings": [
+    {
+        "ID": "boot",
+        "MountPoint": "/boot/efi",
+        "MountOptions": "umask=0077"
+    },
+    {
+        "ID": "rootfs",
+        "MountPoint": "/"
+    }
+]
+```
+
+### Using Partition Labels
+
+```json
+"Partitions": [
+    {
+        "ID": "rootfs",
+        "Name": "my_rootfs",
+        "Start": 9,
+        "End": 0,
+        "FsType": "ext4"
+    }
+]
+```
+
+```json
+"PartitionSettings": [
+    {
+        "ID": "rootfs",
+        "MountPoint": "/",
+        "MountIdentifier": "partlabel"
+    }
+]
+```
+
+<Note>
+`partlabel` cannot be used with `mbr` partition tables and requires the `Name` field in the partition definition.
+</Note>
+
+### Differential Images
+
+For small, deterministic images, use `rdiff`:
+
+```json
+{
+    "ID": "boot",
+    "MountPoint": "/boot/efi",
+    "RdiffBaseImage": "../out/images/core-efi/core-efi-1.0.20200918.1751.ext4"
+}
+```
+
+For large ext4-based images, use `overlay`:
+
+```json
+{
+    "ID": "rootfs",
+    "MountPoint": "/",
+    "OverlayBaseImage": "../out/images/core-efi/core-efi-rootfs-1.0.20200918.1751.ext4"
+}
+```
+
+## Kernel Configuration
+
+### Kernel Options
+
+Specify which kernel packages to install:
+
+<ParamField path="default" type="string" required>
+  Default kernel package name (e.g., `kernel`)
+</ParamField>
+
+```json
+"KernelOptions": {
+    "default": "kernel"
+}
+```
+
+<Warning>
+`KernelOptions` is mandatory for all non-rootfs image types. Do not include kernel packages in `PackageLists`.
+</Warning>
+
+### Kernel Command Line
+
+Configure kernel boot parameters:
+
+<ParamField path="ImaPolicy" type="array">
+  IMA policies: `tcb`, `appraise_tcb`, `secure_boot`
+</ParamField>
+
+<ParamField path="EnableFIPS" type="boolean">
+  Enable FIPS mode
+</ParamField>
+
+<ParamField path="SELinux" type="string">
+  SELinux mode: `enforcing`, `permissive`, `force_enforcing`
+</ParamField>
+
+<ParamField path="SELinuxPolicy" type="string">
+  SELinux policy package name. Default: `selinux-policy`
+</ParamField>
+
+<ParamField path="CGroup" type="string">
+  CGroup version: `version_one` or `version_two`
+</ParamField>
+
+<ParamField path="ExtraCommandLine" type="string">
+  Additional kernel parameters appended to command line
+</ParamField>
+
+#### IMA and Custom Parameters
+
+```json
+"KernelCommandLine": {
+    "ImaPolicy": ["tcb"],
+    "ExtraCommandLine": "console=ttyS0 my_param=value"
+}
+```
+
+#### FIPS Mode
+
+```json
+"KernelCommandLine": {
+    "ExtraCommandLine": "fips=1"
+}
+```
+
+#### SELinux
+
+```json
+"KernelCommandLine": {
+    "SELinux": "enforcing"
+}
+```
+
+```json
+"KernelCommandLine": {
+    "SELinux": "enforcing",
+    "SELinuxPolicy": "my-selinux-policy"
+}
+```
+
+#### CGroup v2
+
+```json
+"KernelCommandLine": {
+    "CGroup": "version_two"
+}
+```
+
+## Boot Configuration
+
+<ParamField path="EnableGrubMkconfig" type="boolean">
+  Use `grub2-mkconfig` to generate boot config. Default: `true`
+</ParamField>
+
+<ParamField path="EnableSystemdFirstboot" type="boolean">
+  Run systemd-firstboot on first boot. Default: `false`
+</ParamField>
+
+<ParamField path="IsKickStartBoot" type="boolean">
+  Enable kickstart-style installation with preinstall scripts
+</ParamField>
+
+## Customization Scripts
+
+Execute shell scripts at various points during image generation:
+
+<ParamField path="PreInstallScripts" type="array">
+  Scripts run before partition creation (from installer context)
+</ParamField>
+
+<ParamField path="PostInstallScripts" type="array">
+  Scripts run after package installation (from installed system)
+</ParamField>
+
+<ParamField path="FinalizeImageScripts" type="array">
+  Scripts run before image finalization (from installed system)
+</ParamField>
+
+### Script Format
+
+```json
+"PostInstallScripts": [
+    {
+        "Path": "scripts/configure-system.sh"
+    },
+    {
+        "Path": "scripts/setup-network.sh",
+        "Args": "--interface eth0 --dhcp"
+    }
+]
+```
+
+<Info>
+Script execution order: PreInstall → Create Partitions → Install Packages → PostInstall → Configure Bootloader → Finalize
+</Info>
+
+### PreInstall Scripts
+
+Run before installation begins (from installer context):
+
+```json
+"IsKickStartBoot": true,
+"PreInstallScripts": [
+    {
+        "Path": "scripts/configure-partitions.sh"
+    }
+]
+```
+
+<Note>
+PreInstall scripts must set `IsKickStartBoot` to `true` and should create partition configuration at `/tmp/part-include`.
+</Note>
+
+## Additional Files
+
+Copy files into the image:
+
+<ParamField path="AdditionalFiles" type="object">
+  Map of source paths to destination paths (or FileConfig objects)
+</ParamField>
+
+### Simple File Copy
+
+```json
+"AdditionalFiles": {
+    "../../out/tools/imager": "/installer/imager",
+    "configs/my-config.conf": "/etc/myapp/config.conf"
+}
+```
+
+### Multiple Destinations and Permissions
+
+```json
+"AdditionalFiles": {
+    "additionalconfigs": [
+        "/etc/my/config.conf",
+        {
+            "Path": "/etc/yours/config.conf",
+            "Permissions": "664"
+        }
+    ]
+}
+```
+
+## User Configuration
+
+Define system users:
+
+<ParamField path="Users" type="array">
+  Array of user configurations
+</ParamField>
+
+### User Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Name` | string | Username (required) |
+| `UID` | string | User ID (0-60000) |
+| `Password` | string | Password or hash |
+| `PasswordHashed` | boolean | Whether password is hashed |
+| `PasswordExpiresDays` | number | Days until expiration (0-99999, -1 for never) |
+| `SSHPubKeyPaths` | array | SSH public key file paths |
+| `PrimaryGroup` | string | Primary group name |
+| `SecondaryGroups` | array | Secondary group names |
+| `StartupCommand` | string | Shell/command for user |
+| `HomeDirectory` | string | Home directory path |
+
+### User Examples
+
+```json
+"Users": [
+    {
+        "Name": "root",
+        "PasswordHashed": true,
+        "Password": "$6$somesalt$hashedpassword",
+        "_comment": "Generated with: openssl passwd -6 -salt <SALT> <PASSWORD>"
+    },
+    {
+        "Name": "azureuser",
+        "Password": "Welcome123!",
+        "UID": "1001",
+        "PrimaryGroup": "users",
+        "SecondaryGroups": ["wheel", "docker"],
+        "SSHPubKeyPaths": ["keys/authorized_keys"]
+    }
+]
+```
+
+## Network Configuration
+
+Configure network interfaces:
+
+<ParamField path="Networks" type="array">
+  Array of network interface configurations
+</ParamField>
+
+### Network Fields
+
+- `BootProto`: Protocol (`dhcp` or `static`)
+- `GateWay`: Gateway IP address
+- `Ip`: Static IP address
+- `NetMask`: Network mask
+- `OnBoot`: Enable on boot
+- `NameServers`: Array of DNS servers
+- `Device`: Network device name
+
+```json
+"Networks": [
+    {
+        "BootProto": "dhcp",
+        "GateWay": "192.168.20.4",
+        "Ip": "192.169.20.148",
+        "NetMask": "255.255.255.0",
+        "OnBoot": false,
+        "NameServers": ["192.168.30.23"],
+        "Device": "eth0"
+    }
+]
+```
+
+## Package Repositories (ISO Only)
+
+Define custom package repositories for ISO installers:
+
+<ParamField path="PackageRepos" type="array">
+  Array of package repository configurations
+</ParamField>
+
+### Repository Fields
+
+<ParamField path="Name" type="string" required>
+  Repository name
+</ParamField>
+
+<ParamField path="BaseUrl" type="string" required>
+  Repository base URL
+</ParamField>
+
+<ParamField path="Install" type="boolean">
+  Install repo file into final image. Default: `false`
+</ParamField>
+
+<ParamField path="GPGCheck" type="boolean">
+  Verify package signatures. Default: `true`
+</ParamField>
+
+<ParamField path="RepoGPGCheck" type="boolean">
+  Verify repository metadata. Default: `true`
+</ParamField>
+
+<ParamField path="GPGKeys" type="string">
+  Space-separated GPG key paths (e.g., `file:///path/to/key`)
+</ParamField>
+
+```json
+"PackageRepos": [
+    {
+        "Name": "PackageMicrosoftComMirror",
+        "BaseUrl": "https://contoso.com/pmc-mirror/$releasever/prod/base/$basearch",
+        "Install": false
+    },
+    {
+        "Name": "MyCopyOfOfficialRepo",
+        "BaseUrl": "https://contoso.com/cbl-mariner-custom-packages/$releasever/prod/base/$basearch",
+        "Install": true,
+        "GPGCheck": true,
+        "GPGKeys": "file:///etc/pki/rpm-gpg/my-custom-key"
+    }
+]
+```
+
+<Warning>
+Custom repo keys must be provisioned via `AdditionalFiles` for installed repos.
+</Warning>
+
+## Size Optimization
+
+### Disable Documentation and Locales
+
+<ParamField path="DisableRpmDocs" type="boolean">
+  Exclude RPM documentation from image
+</ParamField>
+
+<ParamField path="OverrideRpmLocales" type="string">
+  Locale setting: `NONE` or specific locales (e.g., `en:fr:es`)
+</ParamField>
+
+```json
+"DisableRpmDocs": true,
+"OverrideRpmLocales": "NONE"
+```
+
+### Custom Locales
+
+```json
+"OverrideRpmLocales": "en:fr:es"
+```
+
+<Info>
+Settings are stored in `/usr/lib/rpm/macros.d/macros.installercustomizations_*`. To restore on installed system, remove the macro files and run `tdnf -y reinstall $(rpm -qa)`.
+</Info>
+
+## Advanced Options
+
+<ParamField path="RemoveRpmDb" type="boolean">
+  Remove RPM database after installation (breaks package managers)
+</ParamField>
+
+<ParamField path="PreserveTdnfCache" type="boolean">
+  Keep tdnf cache intact (default cleans cache to save space)
+</ParamField>
+
+<ParamField path="EnableHidepid" type="boolean">
+  Enable stricter hidepid option in `/proc` (hidepid=2)
+</ParamField>
+
+## Complete Example
+
+```json
+{
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "Hostname": "azurelinux",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/cloud-init-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "KernelCommandLine": {
+                "ExtraCommandLine": "console=ttyS0"
+            },
+            "PostInstallScripts": [
+                {
+                    "Path": "scripts/configure-system.sh"
+                }
+            ],
+            "AdditionalFiles": {
+                "configs/cloud-init.cfg": "/etc/cloud/cloud.cfg"
+            },
+            "DisableRpmDocs": true
+        }
+    ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Package Lists" href="./package-lists" icon="list">
+    Learn about package list configuration
+  </Card>
+  <Card title="Examples" href="./examples" icon="code">
+    View complete configuration examples
+  </Card>
+</CardGroup>

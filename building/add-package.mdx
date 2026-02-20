@@ -1,0 +1,443 @@
+---
+title: How to Add a New Package
+description: Step-by-step guide to adding a new package to Azure Linux
+---
+
+This guide walks through the process of adding a new package to Azure Linux. We'll use [Inspektor Gadget](https://github.com/inspektor-gadget/inspektor-gadget) (`ig`) as an example.
+
+## Prerequisites
+
+Before adding a package, ensure you have:
+- Completed the [Prerequisites](/building/prerequisites) setup
+- Built or populated the [Toolchain](/building/toolchain-stage)
+- Familiarity with [RPM SPEC files](https://rpm-software-management.github.io/rpm/manual/spec.html)
+
+## Package Structure
+
+Each package requires:
+
+1. **SPEC file** - Contains information on the software and how to build and package it
+2. **Signature file** (JSON) - Contains hashes of source archives
+3. **Source archives** - The actual source code (`tar.gz` files)
+4. **Optional files** - Patches, helper scripts, etc.
+
+## Step 1: Create Package Directory
+
+<Steps>
+  <Step title="Create directory">
+    Create a directory under `SPECS` with your package name:
+    ```bash
+    mkdir SPECS/ig
+    ```
+  </Step>
+
+  <Step title="Navigate to directory">
+    Change to the package directory:
+    ```bash
+    cd SPECS/ig
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Write the SPEC File
+
+Create `SPECS/ig/ig.spec` with the following structure:
+
+```rpm
+# A sentence describing the packaged software.
+Summary:        The eBPF tool and systems inspection framework
+Name:           ig
+Version:        0.25.0
+Release:        1%{?dist}
+License:        Apache 2.0 and GPL 2.0 for eBPF code
+Vendor:         Microsoft Corporation
+Distribution:   Azure Linux
+Group:          Tools/Container
+URL:            https://github.com/inspektor-gadget/inspektor-gadget
+Source0:        %{name}-%{version}.tar.gz
+Source1:        %{name}-%{version}-govendor-v1.tar.gz
+BuildRequires:  golang
+
+%description
+Inspektor Gadget is a collection of tools (or gadgets) to debug and inspect
+Kubernetes resources and applications. It manages the packaging, deployment
+and execution of eBPF programs in a Kubernetes cluster.
+
+This package contains ig, the local CLI flavor of Inspektor Gadget.
+
+# Preparation steps before building
+%prep
+%autosetup -n inspektor-gadget-%{version}
+%setup -q -n inspektor-gadget-%{version} -T -D -a 1
+
+# Build steps
+%build
+CGO_ENABLED=0 go build \
+    -ldflags "-X github.com/inspektor-gadget/inspektor-gadget/cmd/common.version=v%{version} \
+        -extldflags '-static'" \
+    -tags "netgo" \
+    -o ./bin/build/ig ./cmd/ig
+
+# Installation steps
+%install
+mkdir -p "%{buildroot}/%{_bindir}"
+install -D -m0755 bin/build/ig %{buildroot}/%{_bindir}
+
+# Test steps (optional)
+%check
+make gadgets-unit-tests
+
+# Files included in the RPM
+%files
+%license LICENSE
+%license LICENSE-bpf.txt
+%{_bindir}/ig
+
+%changelog
+* Tue Mar 14 2023 Francis Laniel <flaniel@linux.microsoft.com> - 0.25.0-1
+- Original version for Azure Linux
+- License Verified
+```
+
+### Key SPEC File Sections
+
+<AccordionGroup>
+  <Accordion title="Metadata Section">
+    Defines package information: name, version, license, vendor, etc.
+    
+    - **Vendor** - Always use "Microsoft Corporation"
+    - **Distribution** - Always use "Azure Linux"
+    - **License** - Must accurately reflect the software's license
+  </Accordion>
+
+  <Accordion title="%prep Section">
+    Prepares sources for building. Common macros:
+    - `%autosetup` - Extracts and patches sources
+    - `%setup` - Manual source extraction control
+  </Accordion>
+
+  <Accordion title="%build Section">
+    Contains commands to compile the software. Use standard build tools like:
+    - `make`
+    - `cmake`
+    - `go build`
+    - `./configure && make`
+  </Accordion>
+
+  <Accordion title="%install Section">
+    Installs files into `%{buildroot}`. Files here will be packaged into the RPM.
+  </Accordion>
+
+  <Accordion title="%check Section (Optional)">
+    Runs tests to verify the build. This section is optional but recommended.
+  </Accordion>
+
+  <Accordion title="%files Section">
+    Lists all files to include in the RPM. Use macros like:
+    - `%{_bindir}` - `/usr/bin`
+    - `%{_libdir}` - `/usr/lib64` or `/usr/lib`
+    - `%license` - License files
+    - `%doc` - Documentation files
+  </Accordion>
+</AccordionGroup>
+
+## Step 3: Obtain Source Files
+
+<Steps>
+  <Step title="Download source archive">
+    Download the source tarball:
+    ```bash
+    wget https://github.com/inspektor-gadget/inspektor-gadget/archive/refs/tags/v0.25.0.tar.gz
+    mv v0.25.0.tar.gz ig-0.25.0.tar.gz
+    ```
+  </Step>
+
+  <Step title="Generate vendor archive (for Go packages)">
+    For Go packages, create a vendor archive with dependencies:
+    ```bash
+    # Create generation script
+    cat > generate_source_tarball.sh << 'EOF'
+    #!/bin/bash
+    set -e
+    
+    PKG_VERSION="0.25.0"
+    PKG_NAME="ig"
+    SRC_TARBALL="ig-0.25.0.tar.gz"
+    VENDOR_VERSION="1"
+    
+    tmpdir=$(mktemp -d)
+    trap "rm -rf $tmpdir" EXIT
+    
+    tar -xf $SRC_TARBALL -C $tmpdir
+    cd $tmpdir/inspektor-gadget-$PKG_VERSION
+    
+    go mod vendor
+    
+    tar --sort=name \
+        --mtime="2021-04-26 00:00Z" \
+        --owner=0 --group=0 --numeric-owner \
+        -czf $PKG_NAME-$PKG_VERSION-govendor-v$VENDOR_VERSION.tar.gz vendor
+    
+    mv $PKG_NAME-$PKG_VERSION-govendor-v$VENDOR_VERSION.tar.gz $OLDPWD/
+    EOF
+    
+    chmod +x generate_source_tarball.sh
+    bash generate_source_tarball.sh
+    ```
+  </Step>
+
+  <Step title="Verify files">
+    Confirm you have all necessary source files:
+    ```bash
+    ls SPECS/ig/
+    # Should show:
+    # ig.spec
+    # ig-0.25.0.tar.gz
+    # ig-0.25.0-govendor-v1.tar.gz
+    # generate_source_tarball.sh
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The vendor archive is specific to Go packages. For other languages, you may need different dependency handling (e.g., for Python, Node.js, Rust).
+</Note>
+
+## Step 4: Build the Package
+
+<Steps>
+  <Step title="Setup toolchain">
+    First, ensure the toolchain is ready. For daily builds:
+    ```bash
+    cd toolkit
+    ./scripts/setuplkgtoolchain.sh
+    sudo make toolchain -j8 REBUILD_TOOLCHAIN=n REBUILD_TOOLS=y DAILY_BUILD_ID=lkg
+    ```
+  </Step>
+
+  <Step title="Build package">
+    Build the package with source signature update:
+    ```bash
+    sudo make build-packages \
+      REBUILD_TOOLS=y \
+      SOURCE_URL='https://azurelinuxsrcstorage.blob.core.windows.net/sources/core' \
+      PACKAGE_REBUILD_LIST='ig' \
+      SRPM_PACK_LIST='ig' \
+      RUN_CHECK=y \
+      SRPM_FILE_SIGNATURE_HANDLING=update
+    ```
+    
+    This command:
+    - Packs the SRPM from your spec
+    - Updates source signatures automatically
+    - Builds the package
+    - Runs tests if `%check` section exists
+  </Step>
+
+  <Step title="Verify build output">
+    Check that the RPM was created:
+    ```bash
+    ls -l ../out/RPMS/x86_64/ig-*.rpm
+    rpm -ql ../out/RPMS/x86_64/ig-0.25.0-1.azl3.x86_64.rpm
+    ```
+  </Step>
+</Steps>
+
+## Step 5: Test the Package
+
+### Quick Test: Extract and Run
+
+```bash
+# Extract RPM contents
+cd /tmp
+rpm2cpio ../out/RPMS/x86_64/ig-0.25.0-1.azl3.x86_64.rpm | cpio -idmv
+
+# Test the binary
+./usr/bin/ig --help
+```
+
+### Container Testing
+
+<Steps>
+  <Step title="Create test container">
+    Build a containerized environment for testing:
+    ```bash
+    sudo make containerized-rpmbuild \
+      MODE=test \
+      SRPM_PACK_LIST='ig' \
+      DAILY_BUILD_ID=lkg
+    ```
+  </Step>
+
+  <Step title="Enable local repo">
+    Inside the container, enable the local repository:
+    ```bash
+    enable_local_repo
+    ```
+  </Step>
+
+  <Step title="Install and test">
+    Install your package and test it:
+    ```bash
+    tdnf install /mnt/RPMS/x86_64/ig-0.25.0-1.azl3.x86_64.rpm
+    ig --help
+    ig version
+    ```
+  </Step>
+</Steps>
+
+### VM Testing
+
+For comprehensive testing in a full VM environment:
+
+<Steps>
+  <Step title="Build test VM">
+    Create a VM image with your package:
+    ```bash
+    # First, modify imageconfig to add a user (edit qemu-guest.json)
+    sudo make image \
+      REBUILD_TOOLS=y \
+      REBUILD_PACKAGES=n \
+      CONFIG_FILE=./imageconfigs/qemu-guest.json
+    ```
+  </Step>
+
+  <Step title="Boot VM">
+    Launch the VM with QEMU:
+    ```bash
+    qemu-system-x86_64 -m 4G -nographic -smp 2 -enable-kvm \
+      -bios /usr/share/ovmf/OVMF.fd \
+      -hda ../out/images/qemu-guest/qemu-guest-*.vhdx \
+      -net user,hostfwd=tcp::10022-:22 \
+      -net nic
+    ```
+  </Step>
+
+  <Step title="Copy package to VM">
+    Use SFTP to copy your RPM:
+    ```bash
+    sftp -P 10022 root@localhost
+    put ../out/RPMS/x86_64/ig-0.25.0-1.azl3.x86_64.rpm
+    ```
+  </Step>
+
+  <Step title="Install and test in VM">
+    In the VM:
+    ```bash
+    tdnf install -y ig-0.25.0-1.azl3.x86_64.rpm
+    ig version
+    ig --help
+    ```
+  </Step>
+</Steps>
+
+## Step 6: Source Signatures
+
+Azure Linux enforces hash checking for source files. Each `*.spec` file has a corresponding `*.signatures.json` file.
+
+The build system automatically creates this during your first build with:
+```bash
+SRPM_FILE_SIGNATURE_HANDLING=update
+```
+
+### Manually Update Signatures
+
+If you modify sources later:
+
+```bash
+sudo make input-srpms SRPM_FILE_SIGNATURE_HANDLING=update
+```
+
+## Package Build Dependencies
+
+If your package has build dependencies that are also new, add them to `SRPM_PACK_LIST`:
+
+```bash
+sudo make build-packages \
+  REBUILD_TOOLS=y \
+  SRPM_PACK_LIST='ig dependency1 dependency2' \
+  PACKAGE_REBUILD_LIST='ig'
+```
+
+## Common Package Types
+
+### Go Packages
+Require vendor archives with dependencies:
+- Use `go mod vendor` to create vendor directory
+- Package vendor directory as separate source tarball
+
+### Python Packages
+May need offline dependency bundles:
+- Use `pip download` to get dependencies
+- Package as additional source tarball
+
+### Autotools Packages
+Standard `./configure && make` pattern:
+```rpm
+%build
+%configure
+make %{?_smp_mflags}
+
+%install
+%make_install
+```
+
+### CMake Packages
+Use CMake macros:
+```rpm
+%build
+%cmake
+%cmake_build
+
+%install
+%cmake_install
+```
+
+## Next Steps
+
+After successfully building and testing your package:
+
+1. **Prepare for contribution** - Review the [Azure Linux contribution guidelines](https://github.com/microsoft/azurelinux/blob/main/CONTRIBUTING.md)
+2. **Open a pull request** - Submit your package to the upstream repository
+3. **Respond to feedback** - Address any review comments from maintainers
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with missing dependencies">
+    Add missing dependencies to `BuildRequires:` in your spec file:
+    ```rpm
+    BuildRequires: golang >= 1.20
+    BuildRequires: make
+    BuildRequires: gcc
+    ```
+  </Accordion>
+
+  <Accordion title="Source signature mismatch">
+    Update signatures after modifying sources:
+    ```bash
+    sudo make input-srpms SRPM_FILE_SIGNATURE_HANDLING=update
+    ```
+  </Accordion>
+
+  <Accordion title="%check section fails">
+    Either fix the test or temporarily disable:
+    ```bash
+    sudo make build-packages RUN_CHECK=n SRPM_PACK_LIST='ig'
+    ```
+  </Accordion>
+
+  <Accordion title="Go vendor archive issues">
+    Ensure `go.mod` and `go.sum` are up to date:
+    ```bash
+    go mod tidy
+    go mod vendor
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+- [RPM Packaging Guide](https://rpm-software-management.github.io/rpm/manual/)
+- [Azure Linux SPECS Directory](https://github.com/microsoft/azurelinux/tree/3.0/SPECS)
+- [Azure Linux Contributing Guide](https://github.com/microsoft/azurelinux/blob/main/CONTRIBUTING.md)

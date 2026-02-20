@@ -1,0 +1,235 @@
+---
+title: Package Build Stage
+description: Building Azure Linux packages from specifications
+---
+
+After the toolchain is built or populated, you can build Azure Linux packages. The package stage uses the toolchain to compile packages in parallel.
+
+## Package Build Strategies
+
+The Azure Linux ecosystem provides thousands of packages, but most are not used in a typical image. You can choose to:
+
+- **Build all packages** - Complete rebuild of the entire package repository
+- **Build for specific image** - Only packages needed for a target image
+- **Build specific packages** - Targeted builds for development and testing
+
+## Build All Packages
+
+To rebuild all Azure Linux packages:
+
+```bash
+sudo make build-packages -j$(nproc) REBUILD_TOOLS=y
+```
+
+<Note>
+Building all packages can take many hours. Use parallel builds with `-j$(nproc)` to utilize all CPU cores.
+</Note>
+
+## Build Packages for Specific Image
+
+Build only the packages needed for a specific image by specifying a configuration file:
+
+```bash
+sudo make build-packages -j$(nproc) \
+  CONFIG_FILE=./imageconfigs/core-legacy.json \
+  REBUILD_TOOLS=y
+```
+
+This builds:
+- All packages included in the image
+- All packages needed to build those packages (dependencies)
+- Significantly fewer packages than a full build
+
+<Tip>
+Image configuration files are located in `toolkit/imageconfigs/`. Common configs include:
+- `core-legacy.json` - Basic VHD with legacy BIOS support
+- `core-efi.json` - Basic VHDX with UEFI support
+- `core-container.json` - Container image
+</Tip>
+
+## Targeted Package Building
+
+For rapid iteration on specific packages, use targeted builds:
+
+<Steps>
+  <Step title="Build specific package">
+    Build one or more packages by name:
+    ```bash
+    sudo make build-packages -j$(nproc) \
+      REBUILD_TOOLS=y \
+      SRPM_PACK_LIST="openssh"
+    ```
+  </Step>
+
+  <Step title="Skip chroot rebuild">
+    For subsequent builds, save time by not rebuilding the worker chroot:
+    ```bash
+    sudo make build-packages -j$(nproc) \
+      REBUILD_TOOLS=y \
+      SRPM_PACK_LIST="at openssh" \
+      REFRESH_WORKER_CHROOT=n
+    ```
+  </Step>
+
+  <Step title="Force package rebuild">
+    Force a package to rebuild even if it's up-to-date:
+    ```bash
+    sudo make build-packages -j$(nproc) \
+      REBUILD_TOOLS=y \
+      SRPM_PACK_LIST="at" \
+      PACKAGE_REBUILD_LIST="at" \
+      REFRESH_WORKER_CHROOT=n
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Targeted building downloads dependencies from packages.microsoft.com and rebuilds only the specified SPEC files. This is ideal for developing or modifying packages.
+</Note>
+
+## Package Build Workflow
+
+### Step 1: SRPM Creation
+The build system first creates Source RPMs (SRPMs) from SPEC files and sources:
+
+```bash
+sudo make input-srpms
+```
+
+This command:
+1. Scans local `*.spec` files in `SPECS/`
+2. Locates source files for each package
+3. Creates `*.src.rpm` files bundling specs with sources
+
+### Step 2: RPM Building
+The SRPMs are then built into binary RPMs:
+
+```bash
+sudo make build-packages -j$(nproc)
+```
+
+This process:
+1. Resolves package dependencies
+2. Builds packages in correct dependency order
+3. Uses parallel workers to build multiple packages simultaneously
+4. Places built RPMs in `../out/RPMS/`
+
+## Working with Package Sources
+
+### Download Pre-packaged Sources
+
+Use `DOWNLOAD_SRPMS=y` to download pre-packaged SRPMs instead of packing from local specs:
+
+```bash
+sudo make build-packages -j$(nproc) DOWNLOAD_SRPMS=y
+```
+
+<Warning>
+When `DOWNLOAD_SRPMS=y` is set, local sources and spec files are not used, and your changes will not be reflected in the final packages.
+</Warning>
+
+### Specify Source URL
+
+Provide a custom source server for downloading package sources:
+
+```bash
+sudo make build-packages -j$(nproc) \
+  SOURCE_URL='https://azurelinuxsrcstorage.blob.core.windows.net/sources/core'
+```
+
+## Package Build Variables
+
+### Key Variables
+
+<ParamField path="SRPM_PACK_LIST" type="string">
+  Space-separated list of spec names to pack into SRPMs. If empty, all specs under `SPECS_DIR` are packed.
+  
+  Example: `SRPM_PACK_LIST="kernel golang openssh"`
+</ParamField>
+
+<ParamField path="PACKAGE_BUILD_LIST" type="string">
+  Explicit list of packages to build. Skipped if already up-to-date.
+  
+  Example: `PACKAGE_BUILD_LIST="vim nano"`
+</ParamField>
+
+<ParamField path="PACKAGE_REBUILD_LIST" type="string">
+  Force rebuild these packages even if up-to-date.
+  
+  Example: `PACKAGE_REBUILD_LIST="kernel openssh"`
+</ParamField>
+
+<ParamField path="PACKAGE_IGNORE_LIST" type="string">
+  Pretend these packages are already built (useful when a dependency is broken).
+  
+  Example: `PACKAGE_IGNORE_LIST="ncurses"`
+</ParamField>
+
+<ParamField path="REFRESH_WORKER_CHROOT" type="string" default="y">
+  - `y` - Rebuild worker chroot if changed
+  - `n` - Reuse existing worker chroot (faster for iterative builds)
+</ParamField>
+
+<ParamField path="REBUILD_PACKAGES" type="string" default="y">
+  - `y` - Build packages locally from specs
+  - `n` - Download all packages from repos
+</ParamField>
+
+## Package Testing
+
+Enable package tests during build:
+
+```bash
+sudo make build-packages -j$(nproc) \
+  RUN_CHECK=y \
+  SRPM_PACK_LIST="openssh"
+```
+
+This runs the `%check` section of the spec file to validate the built package.
+
+## Advanced Package Builds
+
+### Build from Custom SPECS Directory
+
+```bash
+sudo make build-packages SPECS_DIR="/my/packages/SPECS" -j$(nproc)
+```
+
+### Update Source Signatures
+
+When you modify source files, update their signature hashes:
+
+```bash
+sudo make input-srpms SRPM_FILE_SIGNATURE_HANDLING=update
+```
+
+### Clean Package Builds
+
+Remove built artifacts before rebuilding:
+
+```bash
+sudo make clean-build-packages
+sudo make build-packages -j$(nproc)
+```
+
+## Build Outputs
+
+Built packages are placed in:
+```
+../out/RPMS/
+├── x86_64/        # Architecture-specific packages
+├── noarch/        # Architecture-independent packages
+└── src/           # Source packages
+```
+
+Build logs are available in:
+```
+../build/logs/pkggen/rpmbuilding/
+```
+
+## Next Steps
+
+After building packages, you can:
+- [Create Images](/building/image-stage) from the built packages
+- [Add New Packages](/building/add-package) to the distribution
+- Review the [Build Variables Reference](/building/build-variables)

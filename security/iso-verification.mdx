@@ -1,0 +1,203 @@
+---
+title: ISO Image Verification
+description: Verify the integrity and authenticity of Azure Linux ISO images using GPG signatures and checksums
+---
+
+It is strongly recommended that you verify the integrity and authenticity of Azure Linux ISO images after downloading them. This two-step process ensures:
+
+1. The checksum file has not been tampered with (GPG signature verification)
+2. The ISO image was not corrupted during download (checksum validation)
+
+<Warning>
+Always verify ISO images before using them in production. Unverified images may be corrupted, tampered with, or compromised.
+</Warning>
+
+## x86_64 ISO Verification
+
+### Download Required Files
+
+```bash
+# Download the ISO image
+wget https://aka.ms/AzureLinux-3.0-x86_64.iso
+
+# Download checksum and signature files
+wget https://aka.ms/azurelinux-3.0-x86_64-iso-checksum
+wget https://aka.ms/azurelinux-3.0-x86_64-iso-checksum-signature
+
+# Download Microsoft's RPM signing public key
+wget https://raw.githubusercontent.com/microsoft/azurelinux/3.0/SPECS/azurelinux-repos/MICROSOFT-RPM-GPG-KEY
+```
+
+### Verify the ISO
+
+```bash
+# Set variables for filenames
+CHECKSUM_FILE="azurelinux-3.0-x86_64-iso-checksum"
+SIGNATURE_FILE="azurelinux-3.0-x86_64-iso-checksum-signature"
+
+# Import Microsoft's RPM signing public key
+gpg --import MICROSOFT-RPM-GPG-KEY
+
+# Verify the checksum file signature
+# Look for: 'Good signature from "Azure Linux RPM Release Signing <marinerrpmprod@microsoft.com>"'
+gpg --verify "$SIGNATURE_FILE" "$CHECKSUM_FILE"
+
+# Fix line endings and verify ISO checksum
+dos2unix "$CHECKSUM_FILE"
+sha256sum --check "$CHECKSUM_FILE"
+```
+
+<Warning>
+The GPG verification must show "Good signature from Azure Linux RPM Release Signing". If you see "BAD signature" or any other error, do not use the ISO.
+</Warning>
+
+### Expected Output
+
+When verification succeeds, you should see:
+
+```
+gpg: Signature made [date]
+gpg: Good signature from "Azure Linux RPM Release Signing <marinerrpmprod@microsoft.com>"
+```
+
+And for the checksum:
+
+```
+AzureLinux-3.0-x86_64.iso: OK
+```
+
+## aarch64 ISO Verification
+
+### Download Required Files
+
+```bash
+# Download the ISO image
+wget https://aka.ms/AzureLinux-3.0-aarch64.iso
+
+# Download checksum and signature files
+wget https://aka.ms/azurelinux-3.0-aarch64-iso-checksum
+wget https://aka.ms/azurelinux-3.0-aarch64-iso-checksum-signature
+
+# Download Microsoft's RPM signing public key
+wget https://raw.githubusercontent.com/microsoft/azurelinux/3.0/SPECS/azurelinux-repos/MICROSOFT-RPM-GPG-KEY
+```
+
+### Verify the ISO
+
+```bash
+# Set variables for filenames
+CHECKSUM_FILE="azurelinux-3.0-aarch64-iso-checksum"
+SIGNATURE_FILE="azurelinux-3.0-aarch64-iso-checksum-signature"
+
+# Import Microsoft's RPM signing public key
+gpg --import MICROSOFT-RPM-GPG-KEY
+
+# Verify the checksum file signature
+# Look for: 'Good signature from "Azure Linux RPM Release Signing <marinerrpmprod@microsoft.com>"'
+gpg --verify "$SIGNATURE_FILE" "$CHECKSUM_FILE"
+
+# Fix line endings and verify ISO checksum
+dos2unix "$CHECKSUM_FILE"
+sha256sum --check "$CHECKSUM_FILE"
+```
+
+## Understanding the Verification Process
+
+### Step 1: GPG Signature Verification
+
+The GPG signature verification ensures that:
+- The checksum file was created by Microsoft's Azure Linux team
+- The checksum file has not been modified since it was signed
+- You're downloading from a legitimate source
+
+### Step 2: Checksum Verification
+
+The checksum verification ensures that:
+- The ISO file downloaded completely without corruption
+- No bits were flipped during transfer
+- The file matches exactly what Microsoft published
+
+## Troubleshooting
+
+### GPG Key Import Issues
+
+If you see "gpg: no valid OpenPGP data found":
+
+```bash
+# Ensure the key file downloaded correctly
+file MICROSOFT-RPM-GPG-KEY
+
+# Try importing with verbose output
+gpg --import --verbose MICROSOFT-RPM-GPG-KEY
+```
+
+### Signature Verification Fails
+
+If GPG verification fails:
+
+1. **Check for "BAD signature"**: The file may be corrupted or tampered with. Re-download all files.
+2. **Check for "Can't check signature: No public key"**: Import the Microsoft GPG key.
+3. **Warning about key not certified**: This is expected. The important part is "Good signature".
+
+### Checksum Verification Fails
+
+If checksum verification fails:
+
+```bash
+# Re-download the ISO (it may be corrupted)
+wget https://aka.ms/AzureLinux-3.0-x86_64.iso
+
+# Verify the checksum file has correct line endings
+file azurelinux-3.0-x86_64-iso-checksum
+
+# Manual checksum check
+sha256sum AzureLinux-3.0-x86_64.iso
+cat azurelinux-3.0-x86_64-iso-checksum
+```
+
+<Warning>
+If checksum verification fails after multiple download attempts, do not use the ISO. Contact Microsoft support or report the issue on GitHub.
+</Warning>
+
+## Automated Verification Script
+
+You can combine all verification steps into a single script:
+
+```bash
+#!/bin/bash
+set -e
+
+ARCH="x86_64"  # or "aarch64"
+CHECKSUM_FILE="azurelinux-3.0-${ARCH}-iso-checksum"
+SIGNATURE_FILE="azurelinux-3.0-${ARCH}-iso-checksum-signature"
+ISO_FILE="AzureLinux-3.0-${ARCH}.iso"
+
+echo "Downloading files..."
+wget -q "https://aka.ms/AzureLinux-3.0-${ARCH}.iso"
+wget -q "https://aka.ms/azurelinux-3.0-${ARCH}-iso-checksum"
+wget -q "https://aka.ms/azurelinux-3.0-${ARCH}-iso-checksum-signature"
+wget -q "https://raw.githubusercontent.com/microsoft/azurelinux/3.0/SPECS/azurelinux-repos/MICROSOFT-RPM-GPG-KEY"
+
+echo "Importing GPG key..."
+gpg --import MICROSOFT-RPM-GPG-KEY 2>/dev/null
+
+echo "Verifying signature..."
+if gpg --verify "$SIGNATURE_FILE" "$CHECKSUM_FILE" 2>&1 | grep -q "Good signature"; then
+    echo "✓ Signature verified"
+else
+    echo "✗ Signature verification failed!"
+    exit 1
+fi
+
+echo "Verifying checksum..."
+dos2unix "$CHECKSUM_FILE" 2>/dev/null
+if sha256sum --check "$CHECKSUM_FILE" 2>&1 | grep -q "OK"; then
+    echo "✓ Checksum verified"
+    echo "✓ ISO is valid and ready to use"
+else
+    echo "✗ Checksum verification failed!"
+    exit 1
+fi
+```
+
+Save this as `verify-iso.sh`, make it executable with `chmod +x verify-iso.sh`, and run it.

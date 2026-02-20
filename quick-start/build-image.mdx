@@ -1,0 +1,201 @@
+---
+title: Build Images
+description: Guide to building Azure Linux VHD, VHDX, and ISO images from source
+---
+
+This guide shows you how to build bootable Azure Linux images from precompiled RPMs in the Azure Linux package repository.
+
+## Prerequisites
+
+Before building images, ensure you have the required build tools installed. See the [Prerequisites](/building/prerequisites) documentation for detailed setup instructions.
+
+For Ubuntu 22.04, the quick setup is:
+
+```bash
+# Install prerequisites
+sudo make -C toolkit install-prereqs
+
+# Create Go symlinks
+sudo ln -sf /usr/lib/go-1.23/bin/go /usr/bin/go
+sudo ln -sf /usr/lib/go-1.23/bin/gofmt /usr/bin/gofmt
+
+# Configure Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+```
+
+<Note>
+After configuring Docker, you'll need to log out and log back in for the user group changes to take effect.
+</Note>
+
+## Clone Azure Linux Repository
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/microsoft/azurelinux.git
+    cd azurelinux
+    ```
+  </Step>
+
+  <Step title="Checkout stable build">
+    ```bash
+    # Sync to the latest stable build
+    git checkout 3.0-stable
+    ```
+  </Step>
+
+  <Step title="Navigate to toolkit">
+    ```bash
+    cd toolkit
+    ```
+  </Step>
+</Steps>
+
+## Build VHD or VHDX Images
+
+Azure Linux supports both VHD (Generation 1) and VHDX (Generation 2) image formats. These images are built from precompiled RPMs at https://packages.microsoft.com/azurelinux/3.0/prod/.
+
+<Warning>
+No user account is provisioned by default in VHD/VHDX images. You must build and attach the `meta-user-data.iso` image to provision user accounts via cloud-init.
+</Warning>
+
+### Build VHDX Image (Generation 2 / UEFI)
+
+```bash
+# Image is placed in ../out/images/core-efi
+sudo make image -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/core-efi.json
+```
+
+### Build VHD Image (Generation 1 / Legacy BIOS)
+
+```bash
+# Image is placed in ../out/images/core-legacy
+sudo make image -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/core-legacy.json
+```
+
+<Note>
+The `-j8` flag uses 8 parallel jobs. Adjust this based on your system's CPU cores for optimal build performance.
+</Note>
+
+## Build ISO Image
+
+The following builds a bootable ISO image:
+
+```bash
+# Image is placed in ../out/images/full
+sudo make iso -j8 REBUILD_TOOLS=y REBUILD_PACKAGES=n CONFIG_FILE=./imageconfigs/full.json
+```
+
+## Create Virtual Machine
+
+After building your image, copy it to your VM host machine.
+
+### Create VHD(X) Virtual Machine with Hyper-V
+
+<Steps>
+  <Step title="Create New Virtual Machine">
+    From Hyper-V, select **Action → New → Virtual Machine**.
+  </Step>
+
+  <Step title="Configure VM Name">
+    Provide a name for your VM and press **Next >**.
+  </Step>
+
+  <Step title="Select Generation">
+    - For VHD: select **Generation 1**
+    - For VHDX: select **Generation 2**
+    
+    Press **Next >**.
+  </Step>
+
+  <Step title="Configure Memory">
+    Change memory size if desired, then press **Next >**.
+  </Step>
+
+  <Step title="Configure Network">
+    Select a virtual switch, then press **Next >**.
+  </Step>
+
+  <Step title="Attach Existing Disk">
+    1. Select **Use an existing virtual hard disk**
+    2. Browse and select your VHD(X) file
+    3. Press **Finish**
+  </Step>
+</Steps>
+
+### Configure Boot Options (Generation 2 / VHDX Only)
+
+<Steps>
+  <Step title="Open VM Settings">
+    Right-click your virtual machine from Hyper-V Manager and select **Settings...**.
+  </Step>
+
+  <Step title="Configure Security">
+    Select **Security** and under **Template:** select **Microsoft UEFI Certificate Authority**.
+  </Step>
+
+  <Step title="Add DVD Drive">
+    1. Select the **SCSI Controller** from the Hardware panel
+    2. Select **DVD Drive** and press **Add**
+  </Step>
+
+  <Step title="Apply Changes">
+    Select **Apply** to apply all changes.
+  </Step>
+</Steps>
+
+### Mount the Meta-User-Data ISO
+
+<Warning>
+You must mount the `meta-user-data.iso` image to provision user accounts. See the [Cloud-init Configuration](/quick-start/cloud-init) guide for details on building this image.
+</Warning>
+
+<Steps>
+  <Step title="Open VM Settings">
+    Right-click your virtual machine from Hyper-V Manager and select **Settings...**.
+  </Step>
+
+  <Step title="Select DVD Drive">
+    - For Gen1/VHD: Select **DVD Drive** nested under **IDE Controller 1**
+    - For Gen2/VHDX: Select **DVD Drive** nested under **SCSI Controller**
+  </Step>
+
+  <Step title="Attach ISO">
+    1. Select **Image File:**
+    2. Browse to the `meta-user-data.iso` file
+    3. Select **Apply** to apply all changes
+  </Step>
+</Steps>
+
+### Boot and Sign In
+
+<Steps>
+  <Step title="Connect to VM">
+    Right-click your VM and select **Connect...**.
+  </Step>
+
+  <Step title="Start VM">
+    Select **Start**.
+  </Step>
+
+  <Step title="Sign In">
+    Wait for Azure Linux to boot to the login prompt, then sign in with the username and password you provisioned in the `meta-user-data.iso`.
+  </Step>
+</Steps>
+
+## Build Parameters
+
+### Common Make Parameters
+
+- `REBUILD_TOOLS=y` - Rebuilds the build tools from source
+- `REBUILD_PACKAGES=n` - Uses precompiled packages from the Azure Linux repository instead of building from source
+- `CONFIG_FILE` - Specifies the image configuration file to use
+- `-j8` - Number of parallel build jobs (adjust based on your CPU cores)
+
+### Available Image Configs
+
+- `core-efi.json` - VHDX image with UEFI boot (Generation 2)
+- `core-legacy.json` - VHD image with legacy BIOS boot (Generation 1)
+- `full.json` - Full ISO installer image

@@ -1,0 +1,64 @@
+---
+title: Build System Overview
+description: Understanding the Azure Linux build system architecture and stages
+---
+
+The Azure Linux build system consists of several phases and tools designed to build the entire distribution from source. At a high level, it can be viewed as three distinct build stages:
+
+## Build Stages
+
+### Toolchain Stage
+This stage builds a bootstrap toolchain and then builds the official toolchain. The official toolchain is used in the subsequent package build stage. Building is highly scripted and serialized in this stage.
+
+The toolchain builds in two sub-phases:
+1. **Bootstrap Phase** - Builds an initial bootstrap toolchain which downloads source packages from upstream sources
+2. **Final Phase** - Uses the bootstrap toolchain to build the final toolchain from SRPMs downloaded from packages.microsoft.com
+
+### Package Stage
+This stage uses outputs from the toolchain stage to build any package not built in the toolchain stage. Packages are built in parallel during this stage.
+
+Large parts of the package build stage are parallelized. Enable this by setting the `-j` flag for `make` to the number of parallel jobs to allow (recommended: number of logical cores available on your system).
+
+### Image Stage
+This stage generates the resulting ISO, VHD, VHDX, and/or container images from the rpm packages built in the package stage.
+
+Images are assembled from a combination of:
+- **Image Configuration files** - Define the image output format and select package lists to include
+- **Package List files** - Describe sets of packages to install in an image
+
+## When to Build from Source
+
+Full builds of Azure Linux are **not** generally needed. All Azure Linux packages are built, signed, and released to an RPM repository at [packages.microsoft.com](https://packages.microsoft.com/azurelinux/3.0/prod/).
+
+**You should build from source when:**
+- Adding or modifying packages in the distribution
+- Creating custom images with specific configurations
+- Testing changes before contributing upstream
+- Learning about the build system internals
+
+**You may not need to build when:**
+- Simply testing or using Azure Linux (download the ISO instead)
+- Experimenting with custom images using pre-built packages
+
+## Build System Components
+
+Each stage can be built:
+- **Completely from scratch** - All components built locally
+- **Partially seeded** - Pre-built packages used where available, only specific components rebuilt
+
+The build system provides flexibility through numerous build variables that control:
+- Whether to rebuild or download toolchain/packages
+- Which packages to build
+- Remote repository URLs and authentication
+- Parallel build settings
+- Caching and incremental build options
+
+## Quick Start
+
+See [Prerequisites](/building/prerequisites) to prepare your build environment, then follow the stage-specific guides:
+
+1. [Toolchain Build Stage](/building/toolchain-stage)
+2. [Package Build Stage](/building/package-stage)
+3. [Image Build Stage](/building/image-stage)
+
+For a complete reference of build variables, see [Build Variables Reference](/building/build-variables).

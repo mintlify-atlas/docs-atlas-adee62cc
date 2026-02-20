@@ -1,0 +1,610 @@
+---
+title: Package Repository Structure
+description: Understanding Azure Linux's package repository organization, source management, and build artifacts
+---
+
+Azure Linux's package repository is organized to support efficient package building, distribution, and maintenance. This guide explains the directory structure, file organization, and workflow.
+
+## Repository Overview
+
+The Azure Linux repository consists of several key directories:
+
+```
+azurelinux/
+├── SPECS/                    # Production packages
+├── SPECS-EXTENDED/           # Experimental packages
+├── SPECS-SIGNED/             # Signed packages (kernels, bootloaders)
+├── toolkit/                  # Build system and tools
+├── LICENSES-AND-NOTICES/     # License tracking
+├── cgmanifest.json           # Component governance manifest
+└── CONTRIBUTING.md           # Contribution guidelines
+```
+
+## SPECS Directory Structure
+
+Each package in the `SPECS` directory follows a consistent structure.
+
+### Package Directory Layout
+
+<Tabs>
+  <Tab title="Simple Package">
+    ```
+    SPECS/acl/
+    ├── acl.spec              # RPM spec file
+    └── acl.signatures.json   # Source file hashes
+    ```
+  </Tab>
+  
+  <Tab title="Package with Patches">
+    ```
+    SPECS/curl/
+    ├── curl.spec
+    ├── curl.signatures.json
+    ├── CVE-2025-0665.patch
+    ├── CVE-2025-0167.patch
+    └── CVE-2025-0725.patch
+    ```
+  </Tab>
+  
+  <Tab title="Package with Service Files">
+    ```
+    SPECS/nginx/
+    ├── nginx.spec
+    ├── nginx.signatures.json
+    ├── nginx.service
+    └── 0001-remove-Werror.patch
+    ```
+  </Tab>
+  
+  <Tab title="Complex Package">
+    ```
+    SPECS/python3/
+    ├── python3.spec
+    ├── python3.signatures.json
+    ├── cgi3.patch
+    ├── CVE-2025-4516.patch
+    ├── CVE-2025-4517.patch
+    ├── CVE-2025-6069.patch
+    └── pathfix.py
+    ```
+  </Tab>
+</Tabs>
+
+### Signature Files
+
+Every SPEC file has an accompanying `.signatures.json` file that contains SHA-256 hashes of all source files.
+
+<CodeGroup>
+```json Simple Signature
+{
+  "Signatures": {
+    "acl-2.3.1.tar.gz": "f3f31d2229c903184ff877aa0ee658b87ec20fec8aebb51e65eaa68d7b24e629"
+  }
+}
+```
+
+```json Multiple Sources
+{
+  "Signatures": {
+    "curl-8.11.1.tar.gz": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "CVE-2025-0665.patch": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "CVE-2025-0167.patch": "567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234"
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+The build system uses these hashes to verify source integrity before building packages. Use `SRPM_FILE_SIGNATURE_HANDLING=update` to automatically update hashes for new sources.
+</Info>
+
+## Source File Management
+
+Azure Linux packages can obtain source files from two locations:
+
+### 1. Azure Linux Source Server
+
+Large source archives (tarballs) are hosted on the Azure Linux source server:
+
+```
+https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/
+```
+
+<Tabs>
+  <Tab title="Example URLs">
+    ```
+    https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/curl-8.11.1.tar.gz
+    https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/nginx-1.28.1.tar.gz
+    https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/python3-3.12.9.tar.xz
+    ```
+  </Tab>
+  
+  <Tab title="Upload Process">
+    ```bash
+    # Only Azure Linux developers can upload to the source server
+    # Request upload assistance in your pull request
+    
+    # 1. Build SRPM locally with local sources
+    sudo make input-srpms SRPM_FILE_SIGNATURE_HANDLING=update
+    
+    # 2. Request upload in PR description:
+    "Please upload curl-8.11.1.tar.gz to the source server"
+    
+    # 3. Azure Linux developer uploads the file
+    # 4. Update SPEC to use server URL
+    Source0: https://azurelinuxsrcstorage.blob.core.windows.net/sources/core/curl-8.11.1.tar.gz
+    ```
+  </Tab>
+</Tabs>
+
+### 2. Local Package Directory
+
+Small files like patches and scripts are stored in the package directory:
+
+```
+SPECS/curl/
+├── curl.spec
+├── CVE-2025-0665.patch          # ← Stored locally
+├── CVE-2025-0167.patch          # ← Stored locally
+└── curl.signatures.json
+```
+
+<Note>
+**Guidelines:**
+- Large archives (> 1MB): Upload to source server
+- Small patches (< 100KB): Store in SPEC directory
+- Configuration files: Store in SPEC directory
+- Build scripts: Store in SPEC directory
+</Note>
+
+## Build Artifacts
+
+When building packages, the toolkit creates several directories with build artifacts:
+
+```
+azurelinux/
+├── build/
+│   ├── INTERMEDIATE_SRPMS/      # Source RPMs generated from SPECS
+│   ├── INTERMEDIATE_SPECS/      # Extracted SPEC files from SRPMs
+│   ├── rpm_cache/               # Downloaded RPM dependencies
+│   ├── pkg_artifacts/           # Package build artifacts
+│   └── imagegen/                # Image generation workspace
+└── out/
+    ├── RPMS/
+    │   ├── x86_64/              # Built binary RPMs (x86_64)
+    │   ├── aarch64/             # Built binary RPMs (ARM64)
+    │   └── noarch/              # Architecture-independent RPMs
+    ├── SRPMS/                   # Final source RPMs
+    └── images/                  # Built system images
+```
+
+### Build Workflow
+
+<Steps>
+  <Step title="SPEC Parsing">
+    `srpmpacker` reads SPEC files from `SPECS/` or `SPECS-EXTENDED/`
+  </Step>
+  
+  <Step title="Source Retrieval">
+    Sources are fetched from local directory or source server
+  </Step>
+  
+  <Step title="Hash Verification">
+    Sources are validated against `.signatures.json` hashes
+  </Step>
+  
+  <Step title="SRPM Creation">
+    Source RPMs are created in `build/INTERMEDIATE_SRPMS/`
+  </Step>
+  
+  <Step title="Dependency Resolution">
+    Build dependencies are downloaded to `build/rpm_cache/`
+  </Step>
+  
+  <Step title="Package Building">
+    Binary RPMs are compiled and placed in `out/RPMS/`
+  </Step>
+</Steps>
+
+## Package Categories
+
+### SPECS - Production Packages
+
+Over 1,500 supported packages including:
+
+<CardGroup cols={3}>
+  <Card title="System Core" icon="microchip">
+    - systemd
+    - glibc
+    - kernel
+    - grub2
+  </Card>
+  
+  <Card title="Development Tools" icon="code">
+    - gcc
+    - golang
+    - python3
+    - nodejs
+  </Card>
+  
+  <Card title="Server Software" icon="server">
+    - nginx
+    - postgresql
+    - redis
+    - openssh
+  </Card>
+  
+  <Card title="Libraries" icon="book">
+    - openssl
+    - curl
+    - zlib
+    - pcre2
+  </Card>
+  
+  <Card title="Utilities" icon="wrench">
+    - coreutils
+    - findutils
+    - grep
+    - tar
+  </Card>
+  
+  <Card title="Security" icon="shield">
+    - selinux
+    - audit
+    - aide
+    - fail2ban
+  </Card>
+</CardGroup>
+
+### SPECS-EXTENDED - Experimental Packages
+
+Over 1,500 packages for specialized use cases:
+
+<AccordionGroup>
+  <Accordion title="Database Systems">
+    - 389-ds-base (LDAP server)
+    - PyGreSQL (PostgreSQL interface)
+    - Judy (key-value store)
+  </Accordion>
+  
+  <Accordion title="Development Libraries">
+    - PEGTL (parser library)
+    - CharLS (JPEG-LS codec)
+    - SuperLU (sparse matrix solver)
+  </Accordion>
+  
+  <Accordion title="Multimedia">
+    - SDL2 (game development)
+    - OpenEXR (HDR images)
+    - a52dec (audio decoder)
+  </Accordion>
+  
+  <Accordion title="Geographic Data">
+    - GeoIP (IP geolocation)
+    - GeoIP-GeoLite-data (geolocation database)
+  </Accordion>
+</AccordionGroup>
+
+### SPECS-SIGNED - Signed Packages
+
+Special packages that require code signing:
+
+```
+SPECS-SIGNED/
+├── kernel/              # Linux kernel
+├── grub2/              # Bootloader
+├── shim/               # UEFI bootloader
+└── systemd-boot/       # UEFI boot manager
+```
+
+<Warning>
+Signed packages require special handling and Microsoft's signing infrastructure. Most contributors won't need to modify these packages.
+</Warning>
+
+## Toolkit Directory
+
+The `toolkit/` directory contains the build system and tools:
+
+```
+toolkit/
+├── Makefile                    # Main build targets
+├── scripts/                    # Build scripts and utilities
+├── tools/                      # Build tools (srpmpacker, grapher, etc.)
+├── docs/                       # Build system documentation
+├── resources/
+│   ├── manifests/
+│   │   └── package/            # Package lists for toolchain
+│   └── imageconfigs/           # Image configuration templates
+└── imageconfigs/               # Image definitions
+```
+
+### Key Build Targets
+
+<Tabs>
+  <Tab title="Package Building">
+    ```bash
+    # Build all packages
+    sudo make build-packages
+    
+    # Build specific package
+    sudo make build-packages PACKAGE_REBUILD_LIST='curl'
+    
+    # Create SRPMs only
+    sudo make input-srpms SRPM_PACK_LIST='curl'
+    
+    # Update signature hashes
+    sudo make input-srpms SRPM_FILE_SIGNATURE_HANDLING=update
+    ```
+  </Tab>
+  
+  <Tab title="Image Building">
+    ```bash
+    # Build QEMU image
+    sudo make image CONFIG_FILE=./imageconfigs/qemu-guest.json
+    
+    # Build cloud image
+    sudo make image CONFIG_FILE=./imageconfigs/azure.json
+    
+    # Build container image
+    sudo make image CONFIG_FILE=./imageconfigs/container.json
+    ```
+  </Tab>
+  
+  <Tab title="Toolchain">
+    ```bash
+    # Get latest toolchain
+    ./scripts/setuplkgtoolchain.sh
+    
+    # Build toolchain from scratch
+    sudo make toolchain REBUILD_TOOLCHAIN=y
+    
+    # Use pre-built toolchain
+    sudo make toolchain REBUILD_TOOLCHAIN=n
+    ```
+  </Tab>
+</Tabs>
+
+## License Management
+
+Azure Linux tracks all package licenses in the `LICENSES-AND-NOTICES/` directory:
+
+```
+LICENSES-AND-NOTICES/
+├── SPECS/
+│   ├── data/
+│   │   └── licenses.json       # License database
+│   └── LICENSES-MAP.md         # Human-readable license map
+└── CONTAINER-IMAGES/           # Container image licenses
+```
+
+### License Validation
+
+<Steps>
+  <Step title="Add Package">
+    Create or update the SPEC file with correct `License:` field
+  </Step>
+  
+  <Step title="Run License Script">
+    ```bash
+    python3 ./toolkit/scripts/license_map.py \
+      ./LICENSES-AND-NOTICES/SPECS/data/licenses.json \
+      ./LICENSES-AND-NOTICES/SPECS/LICENSES-MAP.md \
+      ./SPECS \
+      ./SPECS-EXTENDED \
+      ./SPECS-SIGNED
+    ```
+  </Step>
+  
+  <Step title="Verify Output">
+    Check that licenses are correctly categorized and no warnings appear
+  </Step>
+  
+  <Step title="Commit Changes">
+    Include license updates in your pull request
+  </Step>
+</Steps>
+
+## Component Governance
+
+Azure Linux uses `cgmanifest.json` files for supply chain security:
+
+```
+azurelinux/
+├── cgmanifest.json                           # Root packages
+├── toolkit/
+│   ├── tools/cgmanifest.json                 # Build tools
+│   └── scripts/toolchain/cgmanifest.json     # Toolchain packages
+└── .github/workflows/cgmanifest.json         # CI/CD dependencies
+```
+
+### Updating Component Governance
+
+```bash
+# Validate cgmanifest for a package
+.github/workflows/validate-cg-manifest.sh SPECS/curl/curl.spec
+
+# The script checks:
+# - All sources are listed in cgmanifest.json
+# - All hashes match
+# - Licenses are correctly declared
+```
+
+## Finding Packages
+
+<Tabs>
+  <Tab title="By Name">
+    ```bash
+    # List all packages
+    ls SPECS/
+    
+    # Search for package
+    find SPECS -name "*curl*"
+    
+    # Count packages
+    ls SPECS/ | wc -l
+    ```
+  </Tab>
+  
+  <Tab title="By License">
+    ```bash
+    # Find all MIT licensed packages
+    grep -r "License:.*MIT" SPECS/*/*.spec
+    
+    # Find GPL packages
+    grep -r "License:.*GPL" SPECS/*//*.spec
+    ```
+  </Tab>
+  
+  <Tab title="By Dependency">
+    ```bash
+    # Find packages that require openssl
+    grep -r "Requires:.*openssl" SPECS/*//*.spec
+    
+    # Find packages that build-require cmake
+    grep -r "BuildRequires:.*cmake" SPECS/*//*.spec
+    ```
+  </Tab>
+  
+  <Tab title="By Recent Changes">
+    ```bash
+    # Packages changed in last commit
+    git diff HEAD~1 --name-only | grep "^SPECS/"
+    
+    # Recently updated packages
+    find SPECS -name "*.spec" -mtime -7
+    ```
+  </Tab>
+</Tabs>
+
+## Repository Statistics
+
+<CardGroup cols={2}>
+  <Card title="SPECS Packages" icon="box-check">
+    **1,500+** production-ready packages
+  </Card>
+  
+  <Card title="SPECS-EXTENDED Packages" icon="flask">
+    **1,500+** experimental packages
+  </Card>
+  
+  <Card title="Total Source Files" icon="file">
+    **15,000+** source archives and patches
+  </Card>
+  
+  <Card title="Build Artifacts" icon="cube">
+    **3,000+** binary RPMs per architecture
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep Packages Focused">
+    Each package directory should contain only files related to that package. Don't mix multiple packages in one directory.
+  </Accordion>
+  
+  <Accordion title="Use Descriptive Patch Names">
+    Name patches after CVEs or bug descriptions:
+    - `CVE-2025-0665.patch` ✅
+    - `fix-memory-leak.patch` ✅
+    - `patch1.patch` ❌
+  </Accordion>
+  
+  <Accordion title="Update Signatures">
+    Always update `.signatures.json` when adding or modifying source files. Use `SRPM_FILE_SIGNATURE_HANDLING=update` during builds.
+  </Accordion>
+  
+  <Accordion title="Minimize Local Sources">
+    Store large archives on the source server, not in the repository. Keep the repository size manageable.
+  </Accordion>
+  
+  <Accordion title="Document Unusual Sources">
+    If sources come from non-standard locations, add comments in the SPEC file explaining why.
+  </Accordion>
+</AccordionGroup>
+
+## Common Tasks
+
+<Tabs>
+  <Tab title="Add New Package">
+    ```bash
+    # Create package directory
+    mkdir SPECS/mypackage
+    
+    # Create SPEC file
+    vi SPECS/mypackage/mypackage.spec
+    
+    # Add source file (if small)
+    cp /path/to/patch SPECS/mypackage/fix-bug.patch
+    
+    # Build SRPM and update signatures
+    cd toolkit
+    sudo make input-srpms SRPM_PACK_LIST='mypackage' \
+      SRPM_FILE_SIGNATURE_HANDLING=update
+    ```
+  </Tab>
+  
+  <Tab title="Update Package Version">
+    ```bash
+    # Edit SPEC file - update Version and Release
+    vi SPECS/curl/curl.spec
+    
+    # Download new source
+    wget https://curl.haxx.se/download/curl-8.12.0.tar.gz \
+      -O SPECS/curl/curl-8.12.0.tar.gz
+    
+    # Update signatures
+    cd toolkit
+    sudo make input-srpms SRPM_PACK_LIST='curl' \
+      SRPM_FILE_SIGNATURE_HANDLING=update
+    
+    # Request source upload in PR
+    ```
+  </Tab>
+  
+  <Tab title="Add Security Patch">
+    ```bash
+    # Add patch file
+    cp CVE-2025-1234.patch SPECS/curl/
+    
+    # Edit SPEC file
+    vi SPECS/curl/curl.spec
+    # Add: Patch3: CVE-2025-1234.patch
+    # Update Release number
+    # Add changelog entry
+    
+    # Update signatures
+    cd toolkit
+    sudo make input-srpms SRPM_PACK_LIST='curl' \
+      SRPM_FILE_SIGNATURE_HANDLING=update
+    ```
+  </Tab>
+  
+  <Tab title="Move Package">
+    ```bash
+    # Promote from SPECS-EXTENDED to SPECS
+    git mv SPECS-EXTENDED/mypackage SPECS/mypackage
+    
+    # Update SPEC file
+    vi SPECS/mypackage/mypackage.spec
+    # Increment Release
+    # Add changelog entries
+    
+    # Rebuild
+    cd toolkit
+    sudo make build-packages PACKAGE_REBUILD_LIST='mypackage'
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating SPEC Files" icon="file-code" href="/packages/creating-spec-files">
+    Learn how to write RPM SPEC files
+  </Card>
+  
+  <Card title="Package Overview" icon="box" href="/packages/overview">
+    Return to package management overview
+  </Card>
+</CardGroup>

@@ -1,0 +1,93 @@
+---
+title: Build Prerequisites
+description: System requirements and setup for building Azure Linux
+---
+
+Before building Azure Linux, you need to prepare your system with the necessary prerequisites.
+
+## System Requirements
+
+### Hardware Requirements
+- **CPU**: Multi-core processor (recommended: 8+ cores for parallel builds)
+- **RAM**: Minimum 16GB (32GB+ recommended for full builds)
+- **Disk Space**: Minimum 100GB free space for full builds
+- **Architecture**: x86_64 or aarch64 (ARM64 requires ARM64 build machine)
+
+<Note>
+Azure Linux compiles natively. An ARM64 build machine is required to create ARM64 packages and images.
+</Note>
+
+### Supported Build Platforms
+The Azure Linux toolkit is designed to run on:
+- Ubuntu 20.04 or later
+- Azure Linux itself
+- Other Linux distributions with similar package availability
+
+## Getting the Source Code
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Azure Linux repository from GitHub:
+    ```bash
+    git clone https://github.com/microsoft/azurelinux.git
+    cd azurelinux/toolkit
+    ```
+  </Step>
+
+  <Step title="Checkout stable branch">
+    Checkout the desired release branch. The `3.0-stable` tag tracks the most recent successful release of the 3.0 branch:
+    ```bash
+    git checkout 3.0-stable
+    ```
+  </Step>
+
+  <Step title="Update tags (optional)">
+    To ensure you have the latest stable tag:
+    ```bash
+    git fetch --all --tags
+    ```
+  </Step>
+</Steps>
+
+## Understanding Branches and Tags
+
+### Stable Branches
+- **`3.0-stable`** - Latest known good build of Azure Linux 3.0
+- **`2.0-stable`** - Latest known good build of Azure Linux 2.0
+
+The stable tags always point to the latest validated build where all source and binary packages (SRPMs and RPMs) are published. As fixes are integrated, the tip of a branch may be temporarily unstable. The stable tag will remain fixed until the tip is validated, then it advances.
+
+### Monthly Releases
+Azure Linux is updated continuously, but aggregate releases are declared monthly and [tagged in GitHub](https://github.com/microsoft/azurelinux/releases). These monthly builds are stable and their tags can be substituted for the `3.0-stable` label.
+
+### Alternate Branches
+<Warning>
+Alternate branches are not generally buildable because community builds require the SRPMs and/or RPMs to be published. At this time, published files are only available for the 2.0 and 3.0 branches.
+</Warning>
+
+## Working Directory
+
+<Note>
+All subsequent build commands are assumed to be executed from inside the `toolkit` directory.
+</Note>
+
+After cloning, your working directory structure should be:
+```
+azurelinux/
+├── toolkit/          # Build system (your working directory)
+│   ├── Makefile
+│   ├── scripts/
+│   ├── resources/
+│   └── imageconfigs/
+├── SPECS/            # Package specifications
+└── out/              # Build outputs (created during build)
+```
+
+## Next Steps
+
+With prerequisites in place, you can now proceed to:
+- [Build the Toolchain](/building/toolchain-stage)
+- [Build Packages](/building/package-stage)
+- [Create Images](/building/image-stage)
+
+You may also want to review the [Build Variables Reference](/building/build-variables) to understand available configuration options.

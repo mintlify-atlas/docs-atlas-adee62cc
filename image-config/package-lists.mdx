@@ -1,0 +1,486 @@
+---
+title: "Package List Configuration"
+description: "Configure package lists and dependencies for Azure Linux images"
+---
+
+Package lists define which RPM packages are installed in your Azure Linux image. They are JSON files referenced from the image configuration's `PackageLists` array.
+
+## Package List Format
+
+Package lists are simple JSON files with a `packages` array:
+
+```json packagelist.json
+{
+    "packages": [
+        "package-name-1",
+        "package-name-2",
+        "package-name-3"
+    ]
+}
+```
+
+## Referencing Package Lists
+
+Package lists are referenced in the `SystemConfigs` section:
+
+```json
+"SystemConfigs": [
+    {
+        "PackageLists": [
+            "packagelists/core-packages-image.json",
+            "packagelists/hyperv-packages.json",
+            "packagelists/cloud-init-packages.json"
+        ]
+    }
+]
+```
+
+<Info>
+Paths are relative to the image configuration file location.
+</Info>
+
+## Package List Processing
+
+Package lists are processed in linear order:
+
+1. Each file is scanned sequentially
+2. All packages are combined via union operation
+3. Dependencies are resolved automatically
+4. Final package list is installed
+
+<Warning>
+It is recommended that `initramfs` is the **last package** in your lists to speed up installation.
+</Warning>
+
+## Kernel Packages
+
+<Warning>
+**Do not include kernel packages in PackageLists!** 
+
+- Use `KernelOptions` instead
+- Including kernel in PackageLists results in undefined behavior
+- If packages depend on a kernel, specify it in `KernelOptions`
+</Warning>
+
+### Correct Kernel Configuration
+
+```json
+{
+    "SystemConfigs": [
+        {
+            "PackageLists": [
+                "packagelists/core-packages-image.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            }
+        }
+    ]
+}
+```
+
+## Built-in Package Lists
+
+Azure Linux provides several standard package lists:
+
+### Core Package Lists
+
+<ResponseField name="core-packages-image.json">
+  Essential packages for bootable images:
+  - `shim` - Secure boot loader
+  - `grub2-efi-binary` - GRUB bootloader
+  - `ca-certificates` - SSL certificates
+  - `initramfs` - Initial RAM filesystem
+  - `dracut-hostonly` - Initramfs generator
+  - `shadow-utils` - User/group utilities
+</ResponseField>
+
+```json core-packages-image.json
+{
+    "packages": [
+        "shim",
+        "grub2-efi-binary",
+        "ca-certificates",
+        "cronie-anacron",
+        "logrotate",
+        "core-packages-base-image",
+        "dracut-hostonly",
+        "dracut-vrf",
+        "initramfs",
+        "shadow-utils"
+    ]
+}
+```
+
+<ResponseField name="core-packages-container.json">
+  Minimal packages for container images (no boot components)
+</ResponseField>
+
+<ResponseField name="core-packages-image-aarch64.json">
+  Core packages optimized for ARM64 architecture
+</ResponseField>
+
+### Virtualization Packages
+
+<ResponseField name="hyperv-packages.json">
+  Hyper-V integration services
+</ResponseField>
+
+```json hyperv-packages.json
+{
+    "packages": [
+        "dracut-hyperv",
+        "hyperv-daemons"
+    ]
+}
+```
+
+<ResponseField name="qemu-guest-packages.json">
+  QEMU/KVM guest agent and tools
+</ResponseField>
+
+<ResponseField name="virt-guest-packages.json">
+  Generic virtualization guest packages
+</ResponseField>
+
+<ResponseField name="virtualization-host-packages.json">
+  Packages for running VMs (libvirt, qemu, etc.)
+</ResponseField>
+
+### Cloud and Deployment
+
+<ResponseField name="cloud-init-packages.json">
+  Cloud-init for cloud environment initialization
+</ResponseField>
+
+<ResponseField name="azurevm-packages.json">
+  Azure-specific VM packages (WALinuxAgent, etc.)
+</ResponseField>
+
+<ResponseField name="marketplace-tools-packages.json">
+  Azure Marketplace image tools
+</ResponseField>
+
+### Security Packages
+
+<ResponseField name="selinux.json">
+  Basic SELinux packages
+</ResponseField>
+
+<ResponseField name="selinux-full.json">
+  Complete SELinux packages with all policies
+</ResponseField>
+
+<ResponseField name="fips-packages.json">
+  FIPS 140-2 compliant cryptographic modules
+</ResponseField>
+
+<ResponseField name="cvm-packages.json">
+  Confidential VM packages (attestation, etc.)
+</ResponseField>
+
+<ResponseField name="drtm.json">
+  Dynamic Root of Trust Measurement packages
+</ResponseField>
+
+### Development and Tools
+
+<ResponseField name="developer-packages.json">
+  Development tools (gcc, make, git, etc.)
+</ResponseField>
+
+<ResponseField name="core-tools-packages.json">
+  Additional system utilities and tools
+</ResponseField>
+
+### Specialized Images
+
+<ResponseField name="minimal-os-packages.json">
+  Minimal bootable OS (smallest footprint)
+</ResponseField>
+
+<ResponseField name="distroless-packages-container.json">
+  Distroless container base packages
+</ResponseField>
+
+<ResponseField name="distroless-packages-container-minimal.json">
+  Ultra-minimal distroless packages
+</ResponseField>
+
+<ResponseField name="distroless-packages-debug.json">
+  Distroless with debugging tools
+</ResponseField>
+
+<ResponseField name="baremetal-packages.json">
+  Bare metal hardware support
+</ResponseField>
+
+<ResponseField name="rt-packages.json">
+  Real-time kernel packages
+</ResponseField>
+
+### Utilities
+
+<ResponseField name="ssh-server.json">
+  OpenSSH server packages
+</ResponseField>
+
+<ResponseField name="grub2-mkconfig.json">
+  GRUB2 mkconfig support packages
+</ResponseField>
+
+<ResponseField name="core-container-builder-packages.json">
+  Container build tools (Docker, buildah, etc.)
+</ResponseField>
+
+## Creating Custom Package Lists
+
+Create your own package list for specific use cases:
+
+### Example: Web Server Package List
+
+```json packagelists/web-server.json
+{
+    "packages": [
+        "nginx",
+        "php",
+        "php-fpm",
+        "mariadb",
+        "certbot"
+    ]
+}
+```
+
+### Example: Monitoring Package List
+
+```json packagelists/monitoring.json
+{
+    "packages": [
+        "prometheus",
+        "grafana",
+        "node_exporter",
+        "telegraf"
+    ]
+}
+```
+
+### Using Custom Package Lists
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-image.json",
+    "packagelists/cloud-init-packages.json",
+    "packagelists/web-server.json",
+    "packagelists/monitoring.json"
+]
+```
+
+## Common Package Combinations
+
+### Virtual Machine Image
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-image.json",
+    "packagelists/hyperv-packages.json",
+    "packagelists/cloud-init-packages.json",
+    "packagelists/virt-guest-packages.json"
+]
+```
+
+### Azure Marketplace Image
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-image.json",
+    "packagelists/marketplace-tools-packages.json",
+    "packagelists/azurevm-packages.json",
+    "packagelists/hyperv-packages.json"
+]
+```
+
+### Minimal Container Base
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-container.json"
+]
+```
+
+### FIPS-Compliant Image
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-image.json",
+    "packagelists/fips-packages.json",
+    "packagelists/selinux.json"
+]
+```
+
+### Developer Workstation
+
+```json
+"PackageLists": [
+    "packagelists/core-packages-image.json",
+    "packagelists/developer-packages.json",
+    "packagelists/core-tools-packages.json",
+    "packagelists/ssh-server.json"
+]
+```
+
+## Package Dependencies
+
+Azure Linux automatically resolves package dependencies:
+
+- Dependencies are pulled from configured repositories
+- Transitive dependencies are included
+- Conflicts are detected and reported
+- Version requirements are satisfied
+
+<Note>
+You only need to list direct packages - dependencies are handled automatically.
+</Note>
+
+## Package Repositories
+
+Packages are installed from repositories defined in:
+
+1. Default Azure Linux repositories
+2. Custom repositories (for ISO installers via `PackageRepos`)
+
+### Using Custom Repositories
+
+```json
+"PackageRepos": [
+    {
+        "Name": "CustomRepo",
+        "BaseUrl": "https://myrepo.com/packages/$releasever/$basearch",
+        "Install": true
+    }
+]
+```
+
+Then reference packages from that repository in your package lists:
+
+```json packagelists/custom-packages.json
+{
+    "packages": [
+        "my-custom-package",
+        "another-custom-tool"
+    ]
+}
+```
+
+## Best Practices
+
+<Card title="Order Package Lists Strategically" icon="sort">
+  - Place core/essential packages first
+  - Add feature-specific packages next
+  - Put `initramfs` last for faster installation
+</Card>
+
+<Card title="Keep Lists Modular" icon="layer-group">
+  - Create separate lists for different features
+  - Reuse lists across configurations
+  - Easier to maintain and understand
+</Card>
+
+<Card title="Document Package Purposes" icon="comment">
+  - Add comments in configuration files
+  - Document why specific packages are included
+  - Note dependencies between packages
+</Card>
+
+<Card title="Test Package Combinations" icon="flask">
+  - Verify packages work together
+  - Check for size constraints
+  - Test functionality after installation
+</Card>
+
+<Card title="Never Include Kernel in Lists" icon="triangle-exclamation">
+  - Always use `KernelOptions` for kernels
+  - Check dependencies don't pull in kernels
+  - Validate configuration before building
+</Card>
+
+## Troubleshooting
+
+### Package Not Found
+
+If a package is not found during installation:
+
+1. Verify package name is correct
+2. Check package exists in repository
+3. Ensure repository is accessible
+4. Check repository architecture matches
+
+### Dependency Conflicts
+
+If dependency conflicts occur:
+
+1. Review package versions
+2. Check for incompatible packages
+3. Verify repository priorities
+4. Consider alternative packages
+
+### Large Image Size
+
+If your image is too large:
+
+1. Remove unnecessary package lists
+2. Use `DisableRpmDocs` option
+3. Set `OverrideRpmLocales` to `NONE`
+4. Audit packages for alternatives
+
+## Example Configurations
+
+### Minimal VM
+
+```json
+{
+    "SystemConfigs": [
+        {
+            "PackageLists": [
+                "packagelists/minimal-os-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "DisableRpmDocs": true,
+            "OverrideRpmLocales": "NONE"
+        }
+    ]
+}
+```
+
+### Full-Featured VM
+
+```json
+{
+    "SystemConfigs": [
+        {
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/hyperv-packages.json",
+                "packagelists/cloud-init-packages.json",
+                "packagelists/developer-packages.json",
+                "packagelists/core-tools-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            }
+        }
+    ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="System Configuration" href="./system-config" icon="gear">
+    Configure system settings and options
+  </Card>
+  <Card title="Examples" href="./examples" icon="code">
+    View complete configuration examples
+  </Card>
+</CardGroup>

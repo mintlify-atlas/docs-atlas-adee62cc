@@ -1,0 +1,768 @@
+---
+title: "Configuration Examples"
+description: "Real-world Azure Linux image configuration examples"
+---
+
+This page provides complete, working examples of Azure Linux image configurations for common use cases.
+
+## Basic EFI Virtual Machine
+
+A simple EFI-based VHDX virtual machine with essential packages:
+
+```json core-efi.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/hyperv-packages.json",
+                "packagelists/core-packages-image.json",
+                "packagelists/cloud-init-packages.json",
+                "packagelists/virt-guest-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Hostname": "azurelinux",
+            "DisableRpmDocs": true,
+            "OverrideRpmLocales": "NONE"
+        }
+    ]
+}
+```
+
+**Use case**: Basic virtual machine with Hyper-V support, cloud-init, and size optimizations.
+
+## Legacy BIOS Boot
+
+A legacy BIOS-based VHD image:
+
+```json core-legacy.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 2048,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhd"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["grub"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "legacy",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": ""
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/hyperv-packages.json",
+                "packagelists/core-packages-image.json",
+                "packagelists/cloud-init-packages.json",
+                "packagelists/virt-guest-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Hostname": "azurelinux",
+            "DisableRpmDocs": true,
+            "OverrideRpmLocales": "NONE"
+        }
+    ]
+}
+```
+
+**Use case**: Generation 1 Azure VMs or systems requiring legacy BIOS boot.
+
+## FIPS-Compliant Image
+
+A FIPS 140-2 compliant image with SELinux:
+
+```json core-fips.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 2048,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhd"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["grub"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "legacy",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": ""
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/hyperv-packages.json",
+                "packagelists/fips-packages.json",
+                "packagelists/core-packages-image.json",
+                "packagelists/core-tools-packages.json",
+                "packagelists/cloud-init-packages.json",
+                "packagelists/selinux.json",
+                "packagelists/virt-guest-packages.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "KernelCommandLine": {
+                "ExtraCommandLine": "fips=1",
+                "SELinux": "permissive"
+            },
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+**Use case**: Government or compliance-required deployments needing FIPS cryptography.
+
+## Azure Marketplace Image (Gen2)
+
+An Azure Marketplace Generation 2 image with three partitions:
+
+```json marketplace-gen2.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 5000,
+            "Artifacts": [
+                {
+                    "Name": "cblmariner-gen2",
+                    "Type": "vhd"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "efi",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 65,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "boot",
+                    "Start": 65,
+                    "End": 565,
+                    "FsType": "ext4"
+                },
+                {
+                    "ID": "rootfs",
+                    "Name": "rootfs",
+                    "Start": 565,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "efi",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/marketplace-tools-packages.json",
+                "packagelists/azurevm-packages.json",
+                "packagelists/hyperv-packages.json"
+            ],
+            "AdditionalFiles": {
+                "additionalconfigs/cloud-init.cfg": "/etc/cloud/cloud.cfg",
+                "additionalconfigs/chrony.cfg": "/etc/chrony.conf",
+                "additionalconfigs/wait-for-ptp-hyperv.conf": "/etc/systemd/system/chronyd.service.d/wait-for-ptp-hyperv.conf",
+                "additionalconfigs/51-ptp-hyperv.rules": "/etc/udev/rules.d/51-ptp-hyperv.rules"
+            },
+            "PostInstallScripts": [
+                {
+                    "Path": "additionalconfigs/configure-systemd-networkd.sh"
+                }
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "KernelCommandLine": {
+                "ExtraCommandLine": "console=ttyS0"
+            },
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+**Use case**: Azure Marketplace images with separate boot partition and Azure-specific configurations.
+
+## SELinux Enforcing Mode
+
+An image with SELinux in enforcing mode:
+
+```json core-efi-selinux.json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/hyperv-packages.json",
+                "packagelists/core-packages-image.json",
+                "packagelists/cloud-init-packages.json",
+                "packagelists/selinux-full.json",
+                "packagelists/virt-guest-packages.json"
+            ],
+            "KernelCommandLine": {
+                "SELinux": "permissive"
+            },
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+**Use case**: Security-hardened systems requiring mandatory access control.
+
+## Container Rootfs
+
+A compressed rootfs for containers (no partitions):
+
+```json core-container.json
+{
+    "Disks": [
+        {
+            "Artifacts": [
+                {
+                    "Name": "core",
+                    "Compression": "tar.gz"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "PackageLists": [
+                "packagelists/core-packages-container.json"
+            ],
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+**Use case**: Container base images without boot components.
+
+## Image with Custom Scripts
+
+An image with post-install and finalize scripts:
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "custom",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/cloud-init-packages.json"
+            ],
+            "PostInstallScripts": [
+                {
+                    "Path": "scripts/configure-networking.sh"
+                },
+                {
+                    "Path": "scripts/install-monitoring.sh",
+                    "Args": "--agent prometheus"
+                }
+            ],
+            "FinalizeImageScripts": [
+                {
+                    "Path": "scripts/cleanup.sh"
+                }
+            ],
+            "AdditionalFiles": {
+                "configs/app-config.yaml": "/etc/myapp/config.yaml",
+                "keys/service-account.json": [
+                    {
+                        "Path": "/etc/myapp/credentials.json",
+                        "Permissions": "600"
+                    }
+                ]
+            },
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Hostname": "custom-host"
+        }
+    ]
+}
+```
+
+**Use case**: Automated configuration and deployment of custom applications.
+
+## Multi-User System
+
+An image with configured users:
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "multiuser",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/ssh-server.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Users": [
+                {
+                    "Name": "root",
+                    "PasswordHashed": true,
+                    "Password": "$6$rounds=4096$saltsaltsal$hashedpassword"
+                },
+                {
+                    "Name": "admin",
+                    "UID": "1001",
+                    "Password": "ChangeMe123!",
+                    "PrimaryGroup": "wheel",
+                    "SecondaryGroups": ["docker", "libvirt"],
+                    "HomeDirectory": "/home/admin"
+                },
+                {
+                    "Name": "serviceaccount",
+                    "UID": "2001",
+                    "Password": "!",
+                    "StartupCommand": "/usr/sbin/nologin",
+                    "HomeDirectory": "/var/lib/myservice"
+                }
+            ],
+            "Hostname": "azurelinux"
+        }
+    ]
+}
+```
+
+**Use case**: Multi-tenant systems or systems with service accounts.
+
+## Network-Configured System
+
+An image with static network configuration:
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "networked",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "Networks": [
+                {
+                    "BootProto": "static",
+                    "Ip": "192.168.1.100",
+                    "NetMask": "255.255.255.0",
+                    "GateWay": "192.168.1.1",
+                    "OnBoot": true,
+                    "NameServers": ["8.8.8.8", "8.8.4.4"],
+                    "Device": "eth0"
+                }
+            ],
+            "Hostname": "static-host"
+        }
+    ]
+}
+```
+
+**Use case**: Systems requiring static IP addresses or specific network configuration.
+
+## IMA and Security Hardening
+
+An image with Integrity Measurement Architecture:
+
+```json
+{
+    "Disks": [
+        {
+            "PartitionTableType": "gpt",
+            "MaxSize": 4096,
+            "Artifacts": [
+                {
+                    "Name": "hardened",
+                    "Type": "vhdx"
+                }
+            ],
+            "Partitions": [
+                {
+                    "ID": "boot",
+                    "Flags": ["esp", "boot"],
+                    "Start": 1,
+                    "End": 9,
+                    "FsType": "fat32"
+                },
+                {
+                    "ID": "rootfs",
+                    "Start": 9,
+                    "End": 0,
+                    "FsType": "ext4"
+                }
+            ]
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "Name": "Standard",
+            "BootType": "efi",
+            "PartitionSettings": [
+                {
+                    "ID": "boot",
+                    "MountPoint": "/boot/efi",
+                    "MountOptions": "umask=0077"
+                },
+                {
+                    "ID": "rootfs",
+                    "MountPoint": "/"
+                }
+            ],
+            "PackageLists": [
+                "packagelists/core-packages-image.json",
+                "packagelists/selinux-full.json"
+            ],
+            "KernelOptions": {
+                "default": "kernel"
+            },
+            "KernelCommandLine": {
+                "ImaPolicy": ["tcb", "appraise_tcb"],
+                "SELinux": "force_enforcing",
+                "ExtraCommandLine": "audit=1"
+            },
+            "EnableHidepid": true,
+            "Hostname": "secure-host"
+        }
+    ]
+}
+```
+
+**Use case**: High-security environments requiring file integrity and access controls.
+
+## Configuration Tips
+
+<AccordionGroup>
+  <Accordion title="Choose the Right Boot Type">
+    - Use `efi` for modern systems and Azure Gen2 VMs
+    - Use `legacy` for Azure Gen1 VMs or older systems
+    - Match partition flags to boot type (`esp/boot` for EFI, `grub` for legacy)
+  </Accordion>
+
+  <Accordion title="Optimize Image Size">
+    - Set `DisableRpmDocs: true` to exclude documentation
+    - Set `OverrideRpmLocales: "NONE"` to exclude locales
+    - Use minimal package lists for smaller images
+    - Choose appropriate `MaxSize` for your needs
+  </Accordion>
+
+  <Accordion title="Security Considerations">
+    - Use hashed passwords (never plain text in production)
+    - Enable SELinux for mandatory access control
+    - Consider IMA policies for file integrity
+    - Use `EnableHidepid` to restrict process visibility
+  </Accordion>
+
+  <Accordion title="Package List Order">
+    - Put essential packages first
+    - Add feature-specific packages in the middle
+    - Place `initramfs` packages last for speed
+    - Keep kernel packages in `KernelOptions`, not `PackageLists`
+  </Accordion>
+</AccordionGroup>
+
+## Validation
+
+Before building, validate your configuration:
+
+```bash
+imageconfigvalidator --config myconfig.json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Images" href="../building/build-images" icon="hammer">
+    Learn how to build images from configurations
+  </Card>
+  <Card title="Image Customizer" href="../customization/image-customizer" icon="wand-magic-sparkles">
+    Customize existing images
+  </Card>
+  <Card title="Configuration Schema" href="../reference/imageconfig-schema" icon="book">
+    Complete configuration reference
+  </Card>
+  <Card title="Package Lists" href="./package-lists" icon="list">
+    Learn more about package lists
+  </Card>
+</CardGroup>
