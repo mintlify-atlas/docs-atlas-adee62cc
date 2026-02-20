@@ -94,7 +94,7 @@ Each node in the error uses this format: `{package-name-version-NODE_TYPE<State>
 - `{XXX-BUILD} --> {XXX-RUN}` - XXX must be built before it can be used
 
 <Accordion title="Complete Node Type Reference">
-For full details on graph nodes, see the [Package Building Process](./package-building) documentation.
+For full details on graph nodes, see the [Package Building Process](/architecture/package-building) documentation.
 
 **All Node Types:**
 - **TypeLocalBuild** - Local package that can be built
@@ -197,7 +197,7 @@ There are several strategies to break circular build dependencies:
     3. Download correct source file manually to spec directory
     4. Use `SRPM_FILE_SIGNATURE_HANDLING=update` to update signature
     
-    See [Local Package Handling](./local-packages) for more on signatures.
+    See [Local Package Handling](/architecture/local-packages) for more on signatures.
   </Accordion>
   
   <Accordion title="Unresolved Package Dependency">
@@ -364,7 +364,7 @@ ls -lh ./../out/RPMS/x86_64/ | grep package-name
 
 If you're stuck:
 
-1. **Check Documentation**: Review the [architecture overview](./build-system) and related pages
+1. **Check Documentation**: Review the [architecture overview](/architecture/build-system) and related pages
 2. **Search Issues**: Look for similar problems in the GitHub issues
 3. **Ask the Community**: Open a GitHub issue with:
    - Error message
@@ -379,10 +379,10 @@ If you're stuck:
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Build System Overview" icon="arrow-left" href="./build-system">
+  <Card title="Build System Overview" icon="arrow-left" href="/architecture/build-system">
     Return to the architecture overview
   </Card>
-  <Card title="Package Building" icon="diagram-project" href="./package-building">
+  <Card title="Package Building" icon="diagram-project" href="/architecture/package-building">
     Deep dive into dependency graphs and build orchestration
   </Card>
 </CardGroup>
